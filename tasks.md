@@ -2,6 +2,28 @@
 
 Path from current state (chip-level sync gen, blank 240p signal) to a fully playable Atari Gotcha MiSTer core. Reference netlist: `docs/DICE/games/gotcha.cpp`.
 
+---
+
+## 📍 Resume here — 2026-05-12 evening
+
+**Last commit:** `fdab336` (Phase 1: playfield maze + border).
+
+**To verify on hardware before continuing:**
+1. Open `Arcade-Gotcha.qpf` in Quartus 17.0.2, compile (Processing → Start Compilation), and load the resulting `.rbf` onto the DE10-Nano (or use jtag.cdf via USB blaster).
+2. Watch HDMI output for the Gotcha **maze grid + border pattern** in white on black. The pattern should be stable per-frame; shape comes from C5.pin6 in `rtl/gotcha.sv` (= `C5_g2` net, "MAZE INK").
+3. Possible failure modes worth noting before reporting:
+   - **Totally black screen** → playfield chain not producing any active signal. Likely cause: `F4_Q2_w` never sets (V64 edge detection issue) or `B4_Q2` stuck. Probe these signals via SignalTap or temporary VGA channel split.
+   - **Solid white screen** → reset stuck low, or polarity inverted somewhere. Check `H6_Q1`/`H6_Q2` reset latches still produce correct H/V counter wrap behavior.
+   - **Pattern flickers/jitters** → likely an edge-detect race in `ttl_74107` D5 FF2 or B4 FF2 (CP2 timing). Compare with gotcha.cpp's POS_EDGE vs NEG_EDGE behavior.
+   - **Wrong shape but stable** → translation bug in one of the chip instantiations. Diff `rtl/gotcha.sv` chip-by-chip against gotcha.cpp lines 456-501.
+4. Sync gen (Phase 0) was already verified to produce valid 240p. If Phase 1 broke that (screen rolls or no signal at all), the regression is most likely in the modified `u_M5`, `u_J5`, `u_F4`, or `u_D5` instantiations.
+
+**Next session pick-up:**
+- If Phase 1 looks good → start **Phase 2** (score + play timer). First step: write `rtl/chips/ttl_9316.sv` (real synchronous counter, distinct from the 7493-wired L6/M6), then `ttl_7490`, `ttl_7448`, `ttl_9602`, `ttl_74153`, `ttl_74157`.
+- If Phase 1 needs fixing → start by isolating which signal in the playfield chain is broken (suggest splitting video into R/G/B with different signals like `C5_g1`, `C5_g3`, `C5_g2` to see which subchain works).
+
+---
+
 ## Phase 0 — Sync generator ✓ DONE
 
 H/V counter + HBlank/VBlank/HSync/VSync. Blank-but-valid 240p signal on HDMI.
