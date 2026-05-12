@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project context
 
-This repo is a MiSTer FPGA core that targets **Atari's 1973 *Gotcha*** arcade game (reference material — schematics, PCB photos, marquee — lives in `docs/`). It was forked from the [MiSTer Template core](https://github.com/MiSTer-devel/Template_MiSTer), and at the moment the `rtl/` contents are still the unmodified Template demo (`mycore.v` generates a noisy cosine pattern via `lfsr.v` + `cos.sv`). Porting work will replace `rtl/` with a Gotcha hardware re-implementation; the framework wiring in `Template.sv` and `sys/` stays.
+This repo is a MiSTer FPGA core that targets **Atari's 1973 *Gotcha*** arcade game (reference material — schematics, PCB photos, marquee — lives in `docs/`). Forked from the [MiSTer Template core](https://github.com/MiSTer-devel/Template_MiSTer). The core has been renamed from Template to Gotcha (qpf/qsf/sdc/srf/sv) and an initial **chip-level netlist port** is in progress in `rtl/`.
 
 ### Reference: DICE submodule
 
@@ -17,20 +17,24 @@ This repo is a MiSTer FPGA core that targets **Atari's 1973 *Gotcha*** arcade ga
 - `clean.bat` wipes all Quartus-generated temp directories/files. Run before committing if `.qsf` or other tracked files have been polluted.
 - There is no test harness, linter, or CI in this repo — verification is FPGA synthesis + running on real MiSTer hardware.
 
-## Renaming the core (do this before serious work)
+## files.qip discipline
 
-The core is still named "Template". When renamed (e.g. to `Gotcha`):
-
-- Rename `Template.qpf/.qsf/.sdc/.srf/.sv` → `Gotcha.*` and update `PROJECT_REVISION = "Gotcha"` in the `.qpf`.
-- Update the `CONF_STR` first line in `Template.sv` (line ~210) — this string is the OSD menu definition.
-- **Add core source files to `files.qip` manually, NOT through the Quartus IDE.** The IDE writes new file entries into `Template.qsf`, which causes drift and merge pain. If Quartus has dumped settings into `.qsf`, revert it and move file entries to `files.qip`.
+**Add core source files to `files.qip` manually, NOT through the Quartus IDE.** The IDE writes new file entries into `Gotcha.qsf` instead, which causes drift and merge pain. If Quartus has dumped settings into `.qsf`, revert it and move any file entries to `files.qip`. The current `files.qip` lists `Gotcha.sv`, `rtl/gotcha.sv`, and each `rtl/chips/ttl_*.sv` primitive explicitly.
 
 ## Architecture: how a MiSTer core is wired together
 
-A MiSTer core is two layers:
+A MiSTer core is three layers, and the Gotcha port preserves all three:
 
-1. **Framework (`sys/`)** — shared infrastructure: HPS bridge (`hps_io.sv`), video scaling (`ascal.vhd`, `scandoubler.v`, `hq2x.sv`, `video_mixer.sv`), audio (`audio_out.v`, `i2s.v`, `spdif.v`, `alsa.sv`), SDRAM/DDRAM controllers, PLLs, and the actual top-level entity **`sys_top`** (set in `Template.qsf`). **Treat `sys/` as read-only** — framework updates overwrite it. The qsf sources `sys/sys.tcl` and `sys/sys_analog.tcl` to pull in framework files.
-2. **Core glue (`Template.sv`)** — the `emu` module. `sys_top` instantiates `emu` and provides every external pin (HDMI, SDRAM, DDRAM, audio, SD, USB, ADC, UART). `emu` is where you adapt the actual core (in `rtl/`) to the framework's I/O.
+1. **Framework (`sys/`)** — shared infrastructure: HPS bridge (`hps_io.sv`), video scaling (`ascal.vhd`, `scandoubler.v`, `hq2x.sv`, `video_mixer.sv`), audio (`audio_out.v`, `i2s.v`, `spdif.v`, `alsa.sv`), SDRAM/DDRAM controllers, PLLs, and the actual top-level entity **`sys_top`** (set in `Gotcha.qsf`). **Treat `sys/` as read-only** — framework updates overwrite it. The qsf sources `sys/sys.tcl` and `sys/sys_analog.tcl` to pull in framework files.
+2. **Core glue (`Gotcha.sv`)** — the `emu` module. `sys_top` instantiates `emu` and provides every external pin (HDMI, SDRAM, DDRAM, audio, SD, USB, ADC, UART). `emu` is where you adapt the actual core (in `rtl/`) to the framework's I/O. It instantiates `gotcha` (the netlist top) and the `pll`.
+3. **Core (`rtl/gotcha.sv` + `rtl/chips/ttl_*.sv`)** — the chip-level netlist. `rtl/gotcha.sv` is a structural translation of `docs/DICE/games/gotcha.cpp`: each 74xx chip in the original Atari PCB has a corresponding `ttl_*` primitive instance with **pin-numbered ports** (`pin1`, `pin2`, ...) mirroring the DIP package. Chip designators (J6, L6, K6, ...) and net names (CLK, H1..H256, V1..V256, ...) match the schematic. Translation is mechanical: read a `CONNECTION(SRC, "X", n)` line in gotcha.cpp, wire `.pinN(SRC)` on `ttl_X`.
+
+### Chip-level porting conventions
+
+- **HDL language:** SystemVerilog (`.sv`). Use `logic`, `always_ff`, `always_comb`. Don't write plain Verilog `.v` for new files.
+- **Clock model:** A single `clk_sys` domain at **14.31818 MHz** (= netlist CLOCK). Every TTL flip-flop primitive (`ttl_7474`, `ttl_7493`, `ttl_74107`) uses `always_ff @(posedge clk_sys)` and **edge-detects its chip clock pin** via a `pin_prev` register. The one exception is the master clock divider J6 — its CP1 pin is wired to CLOCK = clk_sys, which can't be sampled in its own domain. `ttl_74107` takes a `CP1_IS_CLK_SYS` parameter; J6 sets it to 1 to fire FF1 on every clk_sys posedge without edge detection. All other 74107 instances leave the parameter at default 0.
+- **Mislabeled chips in `gotcha.cpp`:** L6 and M6 are declared `CHIP("9316")` but wired with the 7493 pinout (CLK on pin 14, R0 on pins 1-3, QA→CKB self-cascade). They are 7493s functionally — instantiate `ttl_7493` for these. F5 and H5 are correctly declared 7493 and follow the same pattern. The real 9316 chips in gotcha.cpp (C4, D1, D4, E3, F3, G1, H3, J3, K1, L1) use the standard 9316 pinout (CLK on pin 2) and will need a separate `ttl_9316` primitive when the player/score logic is ported.
+- **Reference flow when adding a subsystem:** open `docs/DICE/games/gotcha.cpp`, find the `/* SectionName */` block, list the chips, add primitives for any chip types not yet in `rtl/chips/`, then translate each `CONNECTION(SRC, "CHIP", pin)` line into a `.pinN(SRC)` wire in `rtl/gotcha.sv`. Net `#define`s in gotcha.cpp (e.g. `#define H1 "L6", 12`) become Verilog wire aliases.
 
 Inside `emu`, the key wiring is:
 
