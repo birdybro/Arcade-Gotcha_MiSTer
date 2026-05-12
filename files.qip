@@ -1,5 +1,5 @@
-set_global_assignment -name SDC_FILE Gotcha.sdc
-set_global_assignment -name SYSTEMVERILOG_FILE Gotcha.sv
+set_global_assignment -name SDC_FILE Arcade-Gotcha.sdc
+set_global_assignment -name SYSTEMVERILOG_FILE Arcade-Gotcha.sv
 
 # TTL chip primitive library (chip-level netlist port of Gotcha)
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/chips/ttl_7400.sv
