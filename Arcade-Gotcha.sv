@@ -208,12 +208,11 @@ assign VIDEO_ARY = (!ar) ? 12'd3 : 12'd0;
 
 `include "build_id.v"
 localparam CONF_STR = {
-	"Gotcha;;",
+	"A.GOTCHA;;",
 	"-;",
 	"O[122:121],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"-;",
-	"T[0],Reset;",
-	"R[0],Reset and close OSD;",
+	"R[0],Reset;",
 	"v,0;",
 	"V,v",`BUILD_DATE
 };
