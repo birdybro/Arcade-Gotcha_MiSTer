@@ -77,7 +77,7 @@ module gotcha (
     //   FF2: CP2 = M6.QD (H128), J=K=VCC, /CLR2 = H6.Q1 -> Q2 = H256.
     //   CP1_IS_CLK_SYS=1 because pin12 is wired to the master clock.
     // ==================================================================
-    ttl_74107 #(.CP1_IS_CLK_SYS(1)) J6 (
+    ttl_74107 #(.CP1_IS_CLK_SYS(1)) u_J6 (
         .clk_sys (clk_sys),
         .pin1    (VCC),         // J1
         .pin2    (CLK_n),       // /Q1
@@ -98,7 +98,7 @@ module gotcha (
     //   (declared 9316 in gotcha.cpp; functionally a 7493 ripple counter)
     //   CKA=CLK, QA->CKB self-cascade, R0=H6./Q1
     // ==================================================================
-    ttl_7493 L6 (
+    ttl_7493 u_L6 (
         .clk_sys (clk_sys),
         .pin1    (H1),          // CKB <- QA
         .pin2    (H6_Q1_n),     // R0(1)
@@ -114,7 +114,7 @@ module gotcha (
     // M6 - 7493 H counter high nibble
     //   CKA = L6.QD (H8), QA->CKB, R0=H6./Q1
     // ==================================================================
-    ttl_7493 M6 (
+    ttl_7493 u_M6 (
         .clk_sys (clk_sys),
         .pin1    (H16),
         .pin2    (H6_Q1_n),
@@ -131,7 +131,7 @@ module gotcha (
     //   inputs: H1, H2, H4, H64, H128, H256 (+ VCC on pin 2 and 12)
     //   output (pin8) goes LOW when H = 1+2+4+64+128+256 = 455
     // ==================================================================
-    ttl_7430 K6 (
+    ttl_7430 u_K6 (
         .pin1  (H1),
         .pin2  (VCC),
         .pin3  (H128),
@@ -149,7 +149,7 @@ module gotcha (
     //   Gates 2 and 3 unused for now (used for player M-counter logic
     //   later in the port — see gotcha.cpp /* M4 */ and /* Right Control */).
     // ==================================================================
-    ttl_7410 H4 (
+    ttl_7410 u_H4 (
         .pin1  (V256), .pin2  (V1),    .pin13 (V4),    .pin12 (H4_g1_out),
         .pin3  (GND),  .pin4  (GND),   .pin5  (GND),   .pin6  (nc_H4_g2),
         .pin9  (GND),  .pin10 (GND),   .pin11 (GND),   .pin8  (nc_H4_g3)
@@ -163,7 +163,7 @@ module gotcha (
     //   FF2: D=H4_g1_out, CK=H6./Q1, Q2 goes low after V=261 detected.
     //        Q2 async-clears D5.FF1 (V256); /Q2 resets H5/F5 (R0).
     // ==================================================================
-    ttl_7474 H6 (
+    ttl_7474 u_H6 (
         .clk_sys (clk_sys),
         .pin1    (VCC),         // /CLR1
         .pin2    (K6_out),      // D1
@@ -183,7 +183,7 @@ module gotcha (
     // H5 - 7493 V counter low nibble
     //   CKA = H6./Q1, QA->CKB, R0 = H6./Q2
     // ==================================================================
-    ttl_7493 H5 (
+    ttl_7493 u_H5 (
         .clk_sys (clk_sys),
         .pin1    (V1),
         .pin2    (H6_Q2_n),
@@ -199,7 +199,7 @@ module gotcha (
     // F5 - 7493 V counter high nibble
     //   CKA = H5.QD (V8), QA->CKB, R0 = H6./Q2
     // ==================================================================
-    ttl_7493 F5 (
+    ttl_7493 u_F5 (
         .clk_sys (clk_sys),
         .pin1    (V16),
         .pin2    (H6_Q2_n),
@@ -215,7 +215,7 @@ module gotcha (
     // D5 - 74107 V256 latch (FF1 only used here; FF2 belongs to playfield)
     //   FF1: CP1 = F5.QD (V128), J=K=VCC, /CLR1 = H6.Q2 -> Q1 = V256
     // ==================================================================
-    ttl_74107 D5 (
+    ttl_74107 u_D5 (
         .clk_sys (clk_sys),
         .pin1    (VCC),         // J1
         .pin2    (V256_n),      // /Q1
@@ -238,7 +238,7 @@ module gotcha (
     //   Gate 3: pin9=gate2_out, pin10=H6.Q1 -> pin8 = HBLANK
     //   Gate 4: unused here (H32 NAND H64 in playfield section)
     // ==================================================================
-    ttl_7400 M5 (
+    ttl_7400 u_M5 (
         .pin1  (H16),
         .pin2  (H64),
         .pin3  (M5_g1_out),
@@ -257,7 +257,7 @@ module gotcha (
     //   Gate 3: pin8=V16,       pin9=gate2_out -> pin10 = VBLANK
     //   Gates 1 and 4 unused here (used in playfield/video composition).
     // ==================================================================
-    ttl_7402 F6 (
+    ttl_7402 u_F6 (
         .pin1  (nc_F6_pin1), .pin2 (GND), .pin3 (GND),
         .pin4  (VBLANK_n_w),
         .pin5  (VBLANK_w),
@@ -273,7 +273,7 @@ module gotcha (
     //   Gate 2 (pin3 -> pin4): ~H64 for HSync timing
     //   Other gates used in playfield (M1/M3 logic) — stubs for now.
     // ==================================================================
-    ttl_7404 J5 (
+    ttl_7404 u_J5 (
         .pin1  (GND), .pin2  (nc_J5_pin2),
         .pin3  (H64), .pin4  (J5_g2_out),
         .pin5  (GND), .pin6  (nc_J5_pin6),
@@ -287,7 +287,7 @@ module gotcha (
     //   Gate 2 (pin4=H32, pin5=~H64 -> pin6): ~(H32 & ~H64) for HSync
     //   Other gates used in playfield/blanking logic — stubs.
     // ==================================================================
-    ttl_7400 L5 (
+    ttl_7400 u_L5 (
         .pin1  (GND),       .pin2  (GND),       .pin3  (nc_L5_pin3),
         .pin4  (H32),       .pin5  (J5_g2_out), .pin6  (L5_g2_out),
         .pin9  (GND),       .pin10 (GND),       .pin8  (nc_L5_pin8),
@@ -299,7 +299,7 @@ module gotcha (
     //   Gate 4 (pin12=~H64, pin13=HBLANK -> pin11): used as HSync FF /CLR
     //   Other gates used in playfield/control logic — stubs.
     // ==================================================================
-    ttl_7408 J4 (
+    ttl_7408 u_J4 (
         .pin1  (GND),       .pin2  (GND),     .pin3  (nc_J4_pin3),
         .pin4  (GND),       .pin5  (GND),     .pin6  (nc_J4_pin6),
         .pin9  (GND),       .pin10 (GND),     .pin8  (nc_J4_pin8),
@@ -311,7 +311,7 @@ module gotcha (
     //   D=L5_g2_out, CK=H2, /CLR=J4_g4_out, /PR=VCC
     //   /Q1 (pin6) = HSYNC_n
     // ==================================================================
-    ttl_7474 F4 (
+    ttl_7474 u_F4 (
         .clk_sys (clk_sys),
         .pin1    (J4_g4_out),   // /CLR1
         .pin2    (L5_g2_out),   // D1
