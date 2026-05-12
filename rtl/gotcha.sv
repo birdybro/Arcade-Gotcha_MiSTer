@@ -6,8 +6,9 @@
 //  ttl_* primitive instance. Net names (CLK, H1..H256, V1..V256, ...) and
 //  chip designators (J6, L6, K6, ...) mirror the Atari schematic.
 //
-//  Current scope: H/V counter + HSync/VSync/HBlank/VBlank generation only.
-//  Picture, players, collision, audio: TBD.
+//  Current scope: H/V counter + sync gen (Phase 0) + playfield maze pattern
+//  (Phase 1, gotcha.cpp /* Playfield */ section, lines 456-501).
+//  Players, score, collision, audio: TBD (Phases 2-5, see tasks.md).
 //
 //  Note on chip relabel: L6 and M6 are declared CHIP("L6",9316) in gotcha.cpp
 //  but wired with 7493 pinout (CLK on pin 14, R0 on pins 1-3, QA on pin 12,
@@ -60,15 +61,38 @@ module gotcha (
     wire        J4_g4_out;                               // ~H64 & HBLANK
     wire        HSYNC_w, HSYNC_n_w;                      // F4 FF1 outputs
 
-    // Unused-gate stubs (chips whose other gates are used elsewhere in Gotcha
-    // but not yet wired up in this first-light netlist).
-    wire        nc_M5_pin11, nc_J5_pin2, nc_J5_pin6, nc_J5_pin8, nc_J5_pin10, nc_J5_pin12;
+    // Playfield internal nets
+    wire        D6_g2;                                   // ~(H4 & H8)
+    wire        M5_g4;                                   // ~(H32 & H64)
+    wire        F4_Q2_w, F4_Q2_n_w;                      // F4 FF2 (V64 latch)
+    wire        E6_g2;                                   // ~(D6_g2 | F4_Q2_n_w | M5_g4)
+    wire        K5_g1;                                   // H16 ^ H256
+    wire        K4_g1;                                   // ~(K5_g1 | H128)
+    wire        C5_g1;                                   // ~(E6_g2 & K4_g1)
+    wire        B4_Q2;                                   // FF2 of B4 (J=1 K=0)
+    wire        E4_g4;                                   // ~(B4_Q2 & V2)
+    wire        J5_g5;                                   // ~V4
+    wire        K4_g4;                                   // ~(V256_n | ~V4)
+    wire        J5_g4;                                   // ~K4_g4
+    wire        C5_g4;                                   // ~(E4_g4 & J5_g4)
+    wire        D5_Q2_w;                                 // D5 FF2 Q (CP2=C5_g1 toggle)
+    wire        C5_g3;                                   // ~(D5_Q2_w & C5_g4)
+    wire        C5_g2;                                   // ~(C5_g1 & C5_g3) = MAZE INK
+    wire        H8_inv5;                                 // ~C5_g2 (feeds F8 in Phase 2)
+
+    // Stubs for chip gates not yet wired in any phase
+    wire        nc_J5_pin2, nc_J5_pin6, nc_J5_pin12;
     wire        nc_L5_pin3, nc_L5_pin8, nc_L5_pin11;
     wire        nc_J4_pin3, nc_J4_pin6, nc_J4_pin8;
     wire        nc_H4_g2, nc_H4_g3;
-    wire        nc_F4_Q2, nc_F4_Q2_n;
     wire        nc_F6_pin1, nc_F6_pin13;
-    wire        nc_D5_Q2, nc_D5_Q2_n;
+    wire        nc_B4_Q1, nc_B4_Q1_n;                    // B4 FF1 unused in Phase 1
+    wire        nc_E4_g1, nc_E4_g2, nc_E4_g3;            // E4 gates 1-3 unused in Phase 1
+    wire        nc_D6_g1, nc_D6_g3, nc_D6_g4;            // D6 gates 1, 3, 4 unused in Phase 1
+    wire        nc_K4_g2, nc_K4_g3;                      // K4 gates 2, 3 unused in Phase 1
+    wire        nc_K5_g2, nc_K5_g3, nc_K5_g4;            // K5 gates 2, 3, 4 unused in Phase 1
+    wire        nc_E6_g1, nc_E6_g3;                      // E6 gates 1, 3 unused in Phase 1
+    wire        nc_H8_inv1, nc_H8_inv2, nc_H8_inv3, nc_H8_inv4, nc_H8_inv6;
 
     // ==================================================================
     // J6 - 74107 dual JK FF
@@ -212,31 +236,33 @@ module gotcha (
     );
 
     // ==================================================================
-    // D5 - 74107 V256 latch (FF1 only used here; FF2 belongs to playfield)
-    //   FF1: CP1 = F5.QD (V128), J=K=VCC, /CLR1 = H6.Q2 -> Q1 = V256
+    // D5 - 74107 dual JK FF
+    //   FF1 (V256): CP1=V128, J=K=VCC, /CLR1=H6.Q2 -> Q1 = V256
+    //   FF2 (Playfield): CP2=C5.pin3 (C5_g1), J=K=VCC, /CLR2=H6.Q1
+    //                    -> Q2 toggles per C5_g1 edge, drives C5.gate3
     // ==================================================================
     ttl_74107 u_D5 (
         .clk_sys (clk_sys),
-        .pin1    (VCC),         // J1
-        .pin2    (V256_n),      // /Q1
-        .pin3    (V256),        // Q1
-        .pin4    (VCC),         // K1
-        .pin5    (nc_D5_Q2),
-        .pin6    (nc_D5_Q2_n),
-        .pin8    (GND),
-        .pin9    (GND),
-        .pin10   (VCC),
-        .pin11   (GND),
-        .pin12   (V128),        // CP1 <- F5.QD
-        .pin13   (H6_Q2)        // /CLR1 <- H6.Q2
+        .pin1    (VCC),          // J1
+        .pin2    (V256_n),       // /Q1
+        .pin3    (V256),         // Q1
+        .pin4    (VCC),          // K1
+        .pin5    (D5_Q2_w),      // Q2
+        .pin6    (),             // /Q2 unused
+        .pin8    (VCC),          // J2
+        .pin9    (C5_g1),        // CP2
+        .pin10   (H6_Q1),        // /CLR2
+        .pin11   (VCC),          // K2
+        .pin12   (V128),         // CP1
+        .pin13   (H6_Q2)         // /CLR1
     );
 
     // ==================================================================
-    // M5 - 7400 quad NAND, HBLANK NAND-latch
+    // M5 - 7400 quad NAND, HBLANK NAND-latch + playfield H32&H64 gate
     //   Gate 1: pin1=H16, pin2=H64 -> pin3 = ~(H16 & H64)
     //   Gate 2: pin4=gate1_out, pin5=gate3_out -> pin6 = HBLANK_n
     //   Gate 3: pin9=gate2_out, pin10=H6.Q1 -> pin8 = HBLANK
-    //   Gate 4: unused here (H32 NAND H64 in playfield section)
+    //   Gate 4: pin12=H32, pin13=H64 -> pin11 = M5_g4 (playfield)
     // ==================================================================
     ttl_7400 u_M5 (
         .pin1  (H16),
@@ -248,7 +274,7 @@ module gotcha (
         .pin9  (HBLANK_n_w),
         .pin10 (H6_Q1),
         .pin8  (HBLANK_w),
-        .pin12 (GND), .pin13 (GND), .pin11 (nc_M5_pin11)
+        .pin12 (H32), .pin13 (H64), .pin11 (M5_g4)
     );
 
     // ==================================================================
@@ -271,15 +297,17 @@ module gotcha (
     // ==================================================================
     // J5 - 7404 hex inverter
     //   Gate 2 (pin3 -> pin4): ~H64 for HSync timing
-    //   Other gates used in playfield (M1/M3 logic) — stubs for now.
+    //   Gate 4 (pin9 -> pin8): ~K4_g4 for playfield
+    //   Gate 5 (pin11 -> pin10): ~V4 for playfield (B4 reset + K4 input)
+    //   Other gates used later (M1/M3 logic) — stubbed for now.
     // ==================================================================
     ttl_7404 u_J5 (
-        .pin1  (GND), .pin2  (nc_J5_pin2),
-        .pin3  (H64), .pin4  (J5_g2_out),
-        .pin5  (GND), .pin6  (nc_J5_pin6),
-        .pin9  (GND), .pin8  (nc_J5_pin8),
-        .pin11 (GND), .pin10 (nc_J5_pin10),
-        .pin13 (GND), .pin12 (nc_J5_pin12)
+        .pin1  (GND),    .pin2  (nc_J5_pin2),
+        .pin3  (H64),    .pin4  (J5_g2_out),
+        .pin5  (GND),    .pin6  (nc_J5_pin6),
+        .pin9  (K4_g4),  .pin8  (J5_g4),
+        .pin11 (V4),     .pin10 (J5_g5),
+        .pin13 (GND),    .pin12 (nc_J5_pin12)
     );
 
     // ==================================================================
@@ -307,24 +335,159 @@ module gotcha (
     );
 
     // ==================================================================
-    // F4 - 7474 HSync FF (FF1 only)
-    //   D=L5_g2_out, CK=H2, /CLR=J4_g4_out, /PR=VCC
-    //   /Q1 (pin6) = HSYNC_n
+    // F4 - 7474 dual D-FF
+    //   FF1 (HSync): D=L5_g2_out, CK=H2, /CLR=J4_g4_out, /PR=VCC
+    //                /Q1 (pin6) = HSYNC_n
+    //   FF2 (Playfield): D=VCC, CK=V64, /PR=VCC, /CLR=H6.Q2
+    //                    /Q2 (pin8) goes to E6.gate2 input (V64-latched signal)
     // ==================================================================
     ttl_7474 u_F4 (
         .clk_sys (clk_sys),
-        .pin1    (J4_g4_out),   // /CLR1
-        .pin2    (L5_g2_out),   // D1
-        .pin3    (H2),          // CK1
-        .pin4    (VCC),         // /PR1
-        .pin5    (HSYNC_w),     // Q1
-        .pin6    (HSYNC_n_w),   // /Q1 = HSYNC_n
-        .pin8    (nc_F4_Q2_n),
-        .pin9    (nc_F4_Q2),
-        .pin10   (VCC),
-        .pin11   (GND),
-        .pin12   (GND),
-        .pin13   (VCC)
+        .pin1    (J4_g4_out),    // /CLR1
+        .pin2    (L5_g2_out),    // D1
+        .pin3    (H2),           // CK1
+        .pin4    (VCC),          // /PR1
+        .pin5    (HSYNC_w),      // Q1
+        .pin6    (HSYNC_n_w),    // /Q1 = HSYNC_n
+        .pin8    (F4_Q2_n_w),    // /Q2
+        .pin9    (F4_Q2_w),      // Q2
+        .pin10   (VCC),          // /PR2
+        .pin11   (V64),          // CK2
+        .pin12   (VCC),          // D2
+        .pin13   (H6_Q2)         // /CLR2
+    );
+
+    // ==================================================================
+    // ========== /* Playfield */  (gotcha.cpp lines 456-501) ===========
+    // ==================================================================
+
+    // ==================================================================
+    // D6 - 7400 quad NAND
+    //   Gate 2 (pin4=H4, pin5=H8 -> pin6): D6_g2 = ~(H4 & H8) for playfield
+    //   Other gates used in /* Coin */ (Phase 4) — stubbed.
+    // ==================================================================
+    ttl_7400 u_D6 (
+        .pin1  (GND),  .pin2  (GND),  .pin3  (nc_D6_g1),
+        .pin4  (H4),   .pin5  (H8),   .pin6  (D6_g2),
+        .pin9  (GND),  .pin10 (GND),  .pin8  (nc_D6_g3),
+        .pin12 (GND),  .pin13 (GND),  .pin11 (nc_D6_g4)
+    );
+
+    // ==================================================================
+    // E6 - 7427 triple 3-input NOR
+    //   Gate 2 (pin3=D6_g2, pin4=F4./Q2, pin5=M5_g4 -> pin6 = E6_g2):
+    //     E6_g2 = ~(~(H4&H8) | F4./Q2 | ~(H32&H64))
+    //   Other gates used in /* Playfield mux part 2 */ (Phase 2) — stubbed.
+    // ==================================================================
+    ttl_7427 u_E6 (
+        .pin1  (GND), .pin2  (GND), .pin13 (GND), .pin12 (nc_E6_g1),
+        .pin3  (D6_g2),
+        .pin4  (F4_Q2_n_w),
+        .pin5  (M5_g4),
+        .pin6  (E6_g2),
+        .pin9  (GND), .pin10 (GND), .pin11 (GND), .pin8  (nc_E6_g3)
+    );
+
+    // ==================================================================
+    // K5 - 7486 quad XOR
+    //   Gate 1 (pin1=H16, pin2=H256 -> pin3): K5_g1 = H16 XOR H256
+    //   Other gates used later — stubbed.
+    // ==================================================================
+    ttl_7486 u_K5 (
+        .pin1  (H16),  .pin2  (H256), .pin3  (K5_g1),
+        .pin4  (GND),  .pin5  (GND),  .pin6  (nc_K5_g2),
+        .pin9  (GND),  .pin10 (GND),  .pin8  (nc_K5_g3),
+        .pin12 (GND),  .pin13 (GND),  .pin11 (nc_K5_g4)
+    );
+
+    // ==================================================================
+    // K4 - 7402 quad NOR
+    //   Gate 1 (pin2=H128, pin3=K5_g1 -> pin1 = K4_g1):
+    //     K4_g1 = ~((H16 XOR H256) | H128)
+    //   Gate 4 (pin11=V256_n, pin12=J5_g5 -> pin13 = K4_g4):
+    //     K4_g4 = ~(V256_n | ~V4)
+    //   Other gates used later — stubbed.
+    // ==================================================================
+    ttl_7402 u_K4 (
+        .pin1  (K4_g1),
+        .pin2  (H128),
+        .pin3  (K5_g1),
+        .pin4  (nc_K4_g2), .pin5  (GND),  .pin6  (GND),
+        .pin8  (GND), .pin9  (GND), .pin10 (nc_K4_g3),
+        .pin11 (V256_n),
+        .pin12 (J5_g5),
+        .pin13 (K4_g4)
+    );
+
+    // ==================================================================
+    // C5 - 7400 quad NAND  (all four gates used in playfield)
+    //   Gate 1: pin1=E6_g2,  pin2=K4_g1  -> pin3  = C5_g1
+    //   Gate 2: pin4=C5_g1,  pin5=C5_g3  -> pin6  = C5_g2  (MAZE INK)
+    //   Gate 3: pin9=D5.Q2,  pin10=C5_g4 -> pin8  = C5_g3
+    //   Gate 4: pin12=J5_g4, pin13=E4_g4 -> pin11 = C5_g4
+    // ==================================================================
+    ttl_7400 u_C5 (
+        .pin1  (E6_g2),
+        .pin2  (K4_g1),
+        .pin3  (C5_g1),
+        .pin4  (C5_g1),
+        .pin5  (C5_g3),
+        .pin6  (C5_g2),
+        .pin9  (D5_Q2_w),
+        .pin10 (C5_g4),
+        .pin8  (C5_g3),
+        .pin12 (J5_g4),
+        .pin13 (E4_g4),
+        .pin11 (C5_g4)
+    );
+
+    // ==================================================================
+    // B4 - 74107 dual JK FF
+    //   FF1 used in /* M4 */ (Phase 3) — stubbed.
+    //   FF2 (Playfield): J2=VCC, K2=GND, CP2=F4./Q2, /CLR2=J5_g5 (~V4)
+    //                    Q2 -> E4.gate4 input.  J=1,K=0 means SET on edge.
+    // ==================================================================
+    ttl_74107 u_B4 (
+        .clk_sys (clk_sys),
+        .pin1    (GND),       // J1 (FF1 unused)
+        .pin2    (nc_B4_Q1_n),
+        .pin3    (nc_B4_Q1),
+        .pin4    (GND),       // K1
+        .pin5    (B4_Q2),     // Q2
+        .pin6    (),          // /Q2 unused
+        .pin8    (VCC),       // J2
+        .pin9    (F4_Q2_n_w), // CP2
+        .pin10   (J5_g5),     // /CLR2 = ~V4
+        .pin11   (GND),       // K2
+        .pin12   (GND),       // CP1
+        .pin13   (VCC)        // /CLR1 = VCC so FF1 isn't perpetually cleared
+    );
+
+    // ==================================================================
+    // E4 - 7400 quad NAND
+    //   Gate 4: pin12=B4.Q2, pin13=V2 -> pin11 = E4_g4 = ~(B4.Q2 & V2)
+    //   Other gates used in /* Right Control */ (Phase 3) — stubbed.
+    // ==================================================================
+    ttl_7400 u_E4 (
+        .pin1  (GND), .pin2  (GND), .pin3  (nc_E4_g1),
+        .pin4  (GND), .pin5  (GND), .pin6  (nc_E4_g2),
+        .pin9  (GND), .pin10 (GND), .pin8  (nc_E4_g3),
+        .pin12 (B4_Q2), .pin13 (V2), .pin11 (E4_g4)
+    );
+
+    // ==================================================================
+    // H8 - 7404 hex inverter
+    //   Gate 5: pin11=C5_g2 -> pin10 = H8_inv5 = ~MAZE_INK
+    //     (feeds F8 NAND combiner in Phase 2; left dangling for Phase 1)
+    //   Other gates used in player/score logic — stubbed.
+    // ==================================================================
+    ttl_7404 u_H8 (
+        .pin1  (GND),    .pin2  (nc_H8_inv1),
+        .pin3  (GND),    .pin4  (nc_H8_inv2),
+        .pin5  (GND),    .pin6  (nc_H8_inv3),
+        .pin9  (GND),    .pin8  (nc_H8_inv4),
+        .pin11 (C5_g2),  .pin10 (H8_inv5),
+        .pin13 (GND),    .pin12 (nc_H8_inv6)
     );
 
     // ------------------------------------------------------------------
@@ -348,7 +511,10 @@ module gotcha (
     assign VSync = ~V128 & ~V64 & ~V32 & ~V16 & ~V8 & ~V4 & VBLANK_w;
     //               V<4 inside vblank == V \in {0,1,2,3} during blanking
 
-    // Picture — black for now (sync-gen first-light).
-    assign video = 8'h00;
+    // Picture — Phase 1 stub.  Drives the raw maze-ink signal (C5.pin6)
+    // directly to all 8 video bits as black/white.  In Phase 2 this will
+    // be replaced by the full F8 NAND combiner that mixes maze + player
+    // sprites + score segments per gotcha.cpp lines 1072-1078.
+    assign video = C5_g2 ? 8'hFF : 8'h00;
 
 endmodule

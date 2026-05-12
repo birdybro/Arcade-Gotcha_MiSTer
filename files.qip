@@ -7,7 +7,9 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/chips/ttl_7402.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/chips/ttl_7404.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/chips/ttl_7408.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/chips/ttl_7410.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/chips/ttl_7427.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/chips/ttl_7430.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/chips/ttl_7486.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/chips/ttl_7474.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/chips/ttl_7493.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/chips/ttl_74107.sv
