@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project context
 
-This repo is a MiSTer FPGA core that targets **Atari's 1973 *Gotcha*** arcade game (reference material — schematics, PCB photos, marquee — lives in `docs/`). Forked from the [MiSTer Template core](https://github.com/MiSTer-devel/Template_MiSTer). The core has been renamed from Template to Gotcha (qpf/qsf/sdc/srf/sv) and an initial **chip-level netlist port** is in progress in `rtl/`.
+This repo is a MiSTer FPGA core that targets **Atari's 1973 *Gotcha*** arcade game (reference material — schematics, PCB photos, marquee — lives in `docs/`). Forked from the [MiSTer Template core](https://github.com/MiSTer-devel/Template_MiSTer). The core has been renamed from Template to Arcade-Gotcha (qpf/qsf/sdc/srf/sv) and an initial **chip-level netlist port** is in progress in `rtl/`.
 
 ### Reference: DICE submodule
 
@@ -12,21 +12,21 @@ This repo is a MiSTer FPGA core that targets **Atari's 1973 *Gotcha*** arcade ga
 
 ## Toolchain & build
 
-- **Quartus Prime 17.0.2** (Lite or Standard) is required. Do not upgrade — newer versions add no benefit for the DE10-Nano's Cyclone V and introduce project-file incompatibilities that break collaboration. A parallel `Template_Q13.*` project set exists for Quartus 13.
-- Open `Template.qpf` in Quartus, then Processing → Start Compilation. The compiled `.rbf` goes to `output_files/` (gitignored).
+- **Quartus Prime 17.0.2** (Lite or Standard) is required. Do not upgrade — newer versions add no benefit for the DE10-Nano's Cyclone V and introduce project-file incompatibilities that break collaboration.
+- Open `Arcade-Gotcha.qpf` in Quartus, then Processing → Start Compilation. The compiled `.rbf` goes to `output_files/` (gitignored).
 - `clean.bat` wipes all Quartus-generated temp directories/files. Run before committing if `.qsf` or other tracked files have been polluted.
 - There is no test harness, linter, or CI in this repo — verification is FPGA synthesis + running on real MiSTer hardware.
 
 ## files.qip discipline
 
-**Add core source files to `files.qip` manually, NOT through the Quartus IDE.** The IDE writes new file entries into `Gotcha.qsf` instead, which causes drift and merge pain. If Quartus has dumped settings into `.qsf`, revert it and move any file entries to `files.qip`. The current `files.qip` lists `Gotcha.sv`, `rtl/gotcha.sv`, and each `rtl/chips/ttl_*.sv` primitive explicitly.
+**Add core source files to `files.qip` manually, NOT through the Quartus IDE.** The IDE writes new file entries into `Arcade-Gotcha.qsf` instead, which causes drift and merge pain. If Quartus has dumped settings into `.qsf`, revert it and move any file entries to `files.qip`. The current `files.qip` lists `Arcade-Gotcha.sv`, `rtl/gotcha.sv`, and each `rtl/chips/ttl_*.sv` primitive explicitly.
 
 ## Architecture: how a MiSTer core is wired together
 
 A MiSTer core is three layers, and the Gotcha port preserves all three:
 
-1. **Framework (`sys/`)** — shared infrastructure: HPS bridge (`hps_io.sv`), video scaling (`ascal.vhd`, `scandoubler.v`, `hq2x.sv`, `video_mixer.sv`), audio (`audio_out.v`, `i2s.v`, `spdif.v`, `alsa.sv`), SDRAM/DDRAM controllers, PLLs, and the actual top-level entity **`sys_top`** (set in `Gotcha.qsf`). **Treat `sys/` as read-only** — framework updates overwrite it. The qsf sources `sys/sys.tcl` and `sys/sys_analog.tcl` to pull in framework files.
-2. **Core glue (`Gotcha.sv`)** — the `emu` module. `sys_top` instantiates `emu` and provides every external pin (HDMI, SDRAM, DDRAM, audio, SD, USB, ADC, UART). `emu` is where you adapt the actual core (in `rtl/`) to the framework's I/O. It instantiates `gotcha` (the netlist top) and the `pll`.
+1. **Framework (`sys/`)** — shared infrastructure: HPS bridge (`hps_io.sv`), video scaling (`ascal.vhd`, `scandoubler.v`, `hq2x.sv`, `video_mixer.sv`), audio (`audio_out.v`, `i2s.v`, `spdif.v`, `alsa.sv`), SDRAM/DDRAM controllers, PLLs, and the actual top-level entity **`sys_top`** (set in `Arcade-Gotcha.qsf`). **Treat `sys/` as read-only** — framework updates overwrite it. The qsf sources `sys/sys.tcl` and `sys/sys_analog.tcl` to pull in framework files.
+2. **Core glue (`Arcade-Gotcha.sv`)** — the `emu` module. `sys_top` instantiates `emu` and provides every external pin (HDMI, SDRAM, DDRAM, audio, SD, USB, ADC, UART). `emu` is where you adapt the actual core (in `rtl/`) to the framework's I/O. It instantiates `gotcha` (the netlist top) and the `pll`.
 3. **Core (`rtl/gotcha.sv` + `rtl/chips/ttl_*.sv`)** — the chip-level netlist. `rtl/gotcha.sv` is a structural translation of `docs/DICE/games/gotcha.cpp`: each 74xx chip in the original Atari PCB has a corresponding `ttl_*` primitive instance with **pin-numbered ports** (`pin1`, `pin2`, ...) mirroring the DIP package. Chip instance names are prefixed with `u_` (e.g. `u_J6`, `u_L6`, `u_H4`) so they don't collide with signal nets like `H4` or `M1` that share the same letters; the schematic designator after `u_` still matches the PCB position. Net names (CLK, H1..H256, V1..V256, ...) match the schematic verbatim. Translation is mechanical: read a `CONNECTION(SRC, "X", n)` line in gotcha.cpp, wire `.pinN(SRC)` on `ttl_<type>` with instance name `u_X`.
 
 ### Chip-level porting conventions
@@ -46,7 +46,7 @@ Inside `emu`, the key wiring is:
 
 ## Verilog macros (set in `.qsf` as `VERILOG_MACRO`)
 
-These gate framework features at compile time — most are commented out in `Template.qsf`:
+These gate framework features at compile time — most are commented out in `Arcade-Gotcha.qsf`:
 
 | Macro | Effect |
 |---|---|
