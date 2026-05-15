@@ -11,15 +11,11 @@
 // J=0,K=0: hold;  J=1,K=0: set;  J=0,K=1: reset;  J=1,K=1: toggle
 // Async: /CLR=0 -> q=0
 //
-// Parameters CP1_IS_CLK_SYS / CP2_IS_CLK_SYS = 1 mean the chip's clock pin is
-// wired to the FPGA system clock itself (the netlist's CLOCK net). In that mode
-// the FF fires on every clk_sys posedge instead of edge-detecting the pin.
-// Use this only for the master clock divider (J6 in Gotcha); all other 74107
-// instances see derived signals on their CP pins and must edge-detect.
-module ttl_74107 #(
-    parameter int CP1_IS_CLK_SYS = 0,
-    parameter int CP2_IS_CLK_SYS = 0
-) (
+// Every instance (including the J6 master clock divider) edge-detects its CP
+// pin against clk_sys.  clk_sys runs faster than every chip clock — J6 sees
+// the CLOCK_14M net (clk_sys/2) on CP1 — so a single posedge-clk_sys edge
+// detector is sufficient and accurate for all instances.
+module ttl_74107 (
     input  logic clk_sys,
     input  logic pin1,    // J1
     output logic pin2,    // /Q1
@@ -43,9 +39,9 @@ module ttl_74107 #(
         cp1_prev <= pin12;
         cp2_prev <= pin9;
 
-        // FF1
+        // FF1 — negative-edge triggered on CP1
         if (!pin13)        q1 <= 1'b0;
-        else if ((CP1_IS_CLK_SYS != 0) || (~pin12 & cp1_prev)) begin
+        else if (~pin12 & cp1_prev) begin
             unique case ({pin1, pin4})
                 2'b01: q1 <= 1'b0;
                 2'b10: q1 <= 1'b1;
@@ -54,9 +50,9 @@ module ttl_74107 #(
             endcase
         end
 
-        // FF2
+        // FF2 — negative-edge triggered on CP2
         if (!pin10)        q2 <= 1'b0;
-        else if ((CP2_IS_CLK_SYS != 0) || (~pin9 & cp2_prev)) begin
+        else if (~pin9 & cp2_prev) begin
             unique case ({pin8, pin11})
                 2'b01: q2 <= 1'b0;
                 2'b10: q2 <= 1'b1;

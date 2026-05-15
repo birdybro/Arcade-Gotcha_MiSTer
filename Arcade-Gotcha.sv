@@ -212,6 +212,9 @@ localparam CONF_STR = {
 	"-;",
 	"O[122:121],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"-;",
+	"T[1],Coin;",
+	"T[2],Start;",
+	"-;",
 	"R[0],Reset;",
 	"v,0;",
 	"V,v",`BUILD_DATE
@@ -257,10 +260,40 @@ wire        VSync;
 wire        ce_pix;
 wire [7:0]  video;
 
+// COIN1/START1 are active-LOW (DICE COIN_INPUT / START_INPUT convention:
+// 0 when pressed, 1 when released).  OSD T-triggers pulse the corresponding
+// status bit HIGH for only a few hundred microseconds — shorter than B7's
+// 7.3ms debounce window.  We stretch each click to ~50ms (1431818 cycles at
+// 28.636 MHz) so the chip-level coin/start chain sees a clean active-low
+// press long enough to register through B7 + K7.
+localparam int BTN_HOLD_CYCLES = 23'd1_431_818;     // ~50ms at 28.636 MHz
+
+logic [22:0] coin_hold   = '0;
+logic [22:0] start_hold  = '0;
+logic        status1_prev = 1'b0;
+logic        status2_prev = 1'b0;
+
+always_ff @(posedge clk_sys) begin
+	status1_prev <= status[1];
+	status2_prev <= status[2];
+
+	if (status[1] & ~status1_prev)      coin_hold  <= BTN_HOLD_CYCLES;
+	else if (coin_hold  != 0)           coin_hold  <= coin_hold  - 23'd1;
+
+	if (status[2] & ~status2_prev)      start_hold <= BTN_HOLD_CYCLES;
+	else if (start_hold != 0)           start_hold <= start_hold - 23'd1;
+end
+
+wire COIN1  = (coin_hold  == 0);                     // HIGH idle, LOW while held
+wire START1 = (start_hold == 0);
+
 gotcha gotcha
 (
 	.clk_sys (clk_sys),
 	.reset   (reset),
+
+	.COIN1   (COIN1),
+	.START1  (START1),
 
 	.ce_pix  (ce_pix),
 	.HBlank  (HBlank),
