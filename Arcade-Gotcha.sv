@@ -212,10 +212,9 @@ localparam CONF_STR = {
 	"-;",
 	"O[122:121],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"-;",
-	"T[1],Coin;",
-	"T[2],Start;",
-	"-;",
 	"R[0],Reset;",
+	"J1,Coin,Start;",
+	"jn,Select,Start;",
 	"v,0;",
 	"V,v",`BUILD_DATE
 };
@@ -224,6 +223,7 @@ wire forced_scandoubler;
 wire   [1:0] buttons;
 wire [127:0] status;
 wire  [10:0] ps2_key;
+wire  [31:0] joystick_0;
 
 hps_io #(.CONF_STR(CONF_STR)) hps_io
 (
@@ -237,7 +237,9 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 	.buttons(buttons),
 	.status(status),
 	.status_menumask({status[5]}),
-	
+
+	.joystick_0(joystick_0),
+
 	.ps2_key(ps2_key)
 );
 
@@ -260,27 +262,34 @@ wire        VSync;
 wire        ce_pix;
 wire [7:0]  video;
 
-// COIN1/START1 are active-LOW (DICE COIN_INPUT / START_INPUT convention:
-// 0 when pressed, 1 when released).  OSD T-triggers pulse the corresponding
-// status bit HIGH for only a few hundred microseconds — shorter than B7's
-// 7.3ms debounce window.  We stretch each click to ~50ms (1431818 cycles at
-// 28.636 MHz) so the chip-level coin/start chain sees a clean active-low
-// press long enough to register through B7 + K7.
+// Coin / Start come from the joystick (defined by the "J1,Coin,Start;" line
+// in CONF_STR): joystick_0[4] = Coin, joystick_0[5] = Start (MiSTer bit
+// layout — [3:0] are directions, buttons start at [4]).  They are active-HIGH
+// from hps_io.  COIN1/START1 into the gotcha core are active-LOW (DICE
+// COIN_INPUT / START_INPUT convention).
+//
+// A quick controller tap can be shorter than B7's 7.3ms RC debounce window,
+// so each press's rising edge starts a ~50ms (1431818 cycles @ 28.636 MHz)
+// active-low hold.  Edge-triggered, so holding the button still produces a
+// single ~50ms pulse — correct for a coin/start input.
 localparam int BTN_HOLD_CYCLES = 23'd1_431_818;     // ~50ms at 28.636 MHz
 
-logic [22:0] coin_hold   = '0;
-logic [22:0] start_hold  = '0;
-logic        status1_prev = 1'b0;
-logic        status2_prev = 1'b0;
+wire         coin_btn   = joystick_0[4];
+wire         start_btn  = joystick_0[5];
+
+logic [22:0] coin_hold      = '0;
+logic [22:0] start_hold     = '0;
+logic        coin_btn_prev  = 1'b0;
+logic        start_btn_prev = 1'b0;
 
 always_ff @(posedge clk_sys) begin
-	status1_prev <= status[1];
-	status2_prev <= status[2];
+	coin_btn_prev  <= coin_btn;
+	start_btn_prev <= start_btn;
 
-	if (status[1] & ~status1_prev)      coin_hold  <= BTN_HOLD_CYCLES;
+	if (coin_btn & ~coin_btn_prev)      coin_hold  <= BTN_HOLD_CYCLES;
 	else if (coin_hold  != 0)           coin_hold  <= coin_hold  - 23'd1;
 
-	if (status[2] & ~status2_prev)      start_hold <= BTN_HOLD_CYCLES;
+	if (start_btn & ~start_btn_prev)    start_hold <= BTN_HOLD_CYCLES;
 	else if (start_hold != 0)           start_hold <= start_hold - 23'd1;
 end
 
