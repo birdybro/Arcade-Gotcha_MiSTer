@@ -15,7 +15,16 @@ This repo is a MiSTer FPGA core that targets **Atari's 1973 *Gotcha*** arcade ga
 - **Quartus Prime 17.0.2** (Lite or Standard) is required. Do not upgrade — newer versions add no benefit for the DE10-Nano's Cyclone V and introduce project-file incompatibilities that break collaboration.
 - Open `Arcade-Gotcha.qpf` in Quartus, then Processing → Start Compilation. The compiled `.rbf` goes to `output_files/` (gitignored).
 - `clean.bat` wipes all Quartus-generated temp directories/files. Run before committing if `.qsf` or other tracked files have been polluted.
-- There is no test harness, linter, or CI in this repo — verification is FPGA synthesis + running on real MiSTer hardware.
+- There is no test harness or CI in this repo — final verification is FPGA synthesis + running on real MiSTer hardware. For fast iteration, `verilator --lint-only --top-module gotcha rtl/gotcha.sv rtl/chips/ttl_*.sv` (suppress `-Wno-WIDTH -Wno-UNOPTFLAT -Wno-CASEINCOMPLETE`) catches connectivity/syntax/comb-loop errors before a Quartus run. The `emu` wrapper (`Arcade-Gotcha.sv`) can't be linted standalone — it needs `sys/`.
+
+## Reference docs
+
+Two local reference trees (added 2026-05; consult them when touching the relevant area):
+
+- **`mister-framework-reference/`** — the MiSTer framework contracts: `emu` top-level, `CONF_STR`, clocks/PLLs, `hps_io`, video, **audio** (the `AUDIO_L/R/S/MIX` stability-synchroniser contract), build/sim. Use before wiring anything to the framework boundary.
+- **`hdl-coding-guidelines/`** — synthesizable-SV + Cyclone V guidelines: registers/comb blocks, FSMs, memory/DSP inference, timing/SDC, and a numbered **`90-anti-patterns.md`** (e.g. #3 combinational feedback loop, #4 inferred latch). Consult when adding non-trivial RTL.
+
+Each tree has a `00-INDEX.md`. These already shaped the Phase 7 audio code (registered `AUDIO`, clocked SR latch instead of cross-coupled gates).
 
 ## files.qip discipline
 
