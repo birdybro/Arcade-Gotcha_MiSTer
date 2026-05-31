@@ -55,13 +55,20 @@ module gotcha (
     // Left player joystick (STICK2) — same [0]=R [1]=L [2]=D [3]=U layout.
     input  logic [3:0]  STICK2,
 
+    // OSD play-time select (POT1 role): picks the D8 play-timer rate.
+    //   0=Normal(1Hz) 1=Short(1.5Hz) 2=Long(0.75Hz) 3=Longest(0.5Hz).
+    input  logic [1:0]  play_time,
+
     output logic        ce_pix,
     output logic        HBlank,
     output logic        HSync,
     output logic        VBlank,
     output logic        VSync,
 
-    output logic [7:0]  video,
+    // Video: the 3 DICE VIDEO channels (gotcha.cpp 1073-1075).  [2]=maze+score
+    //   (F6.13), [1]=right player (VIDEO1), [0]=left player (VIDEO2).  emu.sv maps
+    //   these to RGB — monochrome (faithful default) or colour (OSD option).
+    output logic [2:0]  video,
     output logic signed [15:0] audio        // mono PCM (signed), Phase 7
 );
 
@@ -321,20 +328,29 @@ module gotcha (
     always_ff @(posedge clk_sys) CLOCK_14M <= ~CLOCK_14M;
 
     // ==================================================================
-    // D8 - 555 astable stub.  Original part: 555 with RC=(297kΩ, 2kΩ, 5µF)
-    //      → f = 1.44 / ((R1+2R2)*C) ≈ 0.957 Hz.  We round to exactly 1 Hz
-    //      by toggling a flop every clk_sys/2 = 14318180 clk_sys cycles.
-    //      pin4 = ATTRACT_n; when low, D8 is held in reset.  Output is
-    //      what gotcha.cpp calls D8.pin3 (= K8.CKA).
+    // D8 - 555 astable (play-timer clock).  Original part: 555 with RC=(297kΩ,
+    //      2kΩ, 5µF) → f ≈ 0.957 Hz, with POT1 adjusting the rate (= game length).
+    //      We model it as a flop toggled every D8_HALF_PERIOD clk_sys cycles; the
+    //      OSD play-time option (POT1's role) selects the half-period.  Faster D8
+    //      = the timer reaches rollover sooner = shorter game.
+    //      pin4 = ATTRACT_n; when low, D8 is held in reset.  Output = D8.pin3 (K8.CKA).
     // ==================================================================
-    localparam int D8_HALF_PERIOD = 25'd14_318_180;     // clk_sys = 28.636 MHz
+    logic [24:0] d8_half;                               // clk_sys = 28.636 MHz
+    always_comb begin
+        case (play_time)
+            2'd0:    d8_half = 25'd14_318_180;          // Normal  ~1.00 Hz
+            2'd1:    d8_half = 25'd9_545_453;           // Short   ~1.50 Hz
+            2'd2:    d8_half = 25'd19_090_907;          // Long    ~0.75 Hz
+            default: d8_half = 25'd28_636_360;          // Longest ~0.50 Hz
+        endcase
+    end
     logic [24:0] d8_counter = '0;
     logic        d8_q       = 1'b0;
     always_ff @(posedge clk_sys) begin
         if (!ATTRACT_n) begin
             d8_counter <= '0;
             d8_q       <= 1'b0;
-        end else if (d8_counter == D8_HALF_PERIOD - 1) begin
+        end else if (d8_counter == d8_half - 25'd1) begin
             d8_counter <= '0;
             d8_q       <= ~d8_q;
         end else begin
@@ -1636,9 +1652,8 @@ module gotcha (
     // HS/VS, so we pulse VSync HIGH for V=0..3 inside VBlank.
     assign VSync = ~V128 & ~V64 & ~V32 & ~V16 & ~V8 & ~V4 & VBLANK_w;
 
-    // Monochrome picture: maze + score (F6_pin13) OR'd with the two player
-    // sprites (VIDEO1 right, VIDEO2 left).  Phase 8 replaces this with the
-    // real 3-channel colour video.
-    assign video = (F6_pin13 | VIDEO1 | VIDEO2) ? 8'hFF : 8'h00;
+    // The 3 DICE video channels, passed to emu.sv for RGB mapping:
+    //   [2] = maze + score (F6.13), [1] = right player (VIDEO1), [0] = left (VIDEO2).
+    assign video = {F6_pin13, VIDEO1, VIDEO2};
 
 endmodule

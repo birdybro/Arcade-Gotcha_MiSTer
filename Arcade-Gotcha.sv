@@ -211,6 +211,8 @@ localparam CONF_STR = {
 	"A.GOTCHA;;",
 	"-;",
 	"O[122:121],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
+	"O[3],Color,Off,On;",
+	"O[7:6],Play Time,Normal,Short,Long,Longest;",
 	"-;",
 	"R[0],Reset;",
 	"J1,Coin,Start;",
@@ -262,7 +264,7 @@ wire        HSync;
 wire        VBlank;
 wire        VSync;
 wire        ce_pix;
-wire [7:0]  video;
+wire [2:0]  video;   // DICE channels: [2]=maze+score, [1]=right player, [0]=left player
 wire signed [15:0] audio;
 
 // Coin / Start come from the joystick (defined by the "J1,Coin,Start;" line
@@ -315,6 +317,7 @@ gotcha gotcha
 	.START1  (START1),
 	.STICK1  (stick1),
 	.STICK2  (stick2),
+	.play_time (status[7:6]),
 
 	.ce_pix  (ce_pix),
 	.HBlank  (HBlank),
@@ -332,9 +335,20 @@ assign CE_PIXEL  = ce_pix;
 assign VGA_DE = ~(HBlank | VBlank);
 assign VGA_HS = HSync;
 assign VGA_VS = VSync;
-assign VGA_R  = video;
-assign VGA_G  = video;
-assign VGA_B  = video;
+// Video colour mapping.  video = {bg, p1, p2} = {maze+score, right player, left}.
+//   Monochrome (default, faithful to DICE's B&W Gotcha): any channel -> white.
+//   Colour (OSD "Color" on): white maze/score, cyan right player, yellow left
+//   player, so the two players are easy to tell apart in 2-player play.
+wire bg = video[2], p1 = video[1], p2 = video[0];
+wire color = status[3];
+
+wire r_on = color ? (bg | p2) : (bg | p1 | p2);   // colour: left = yellow (R+G)
+wire g_on = bg | p1 | p2;                          // green on for maze + both players
+wire b_on = color ? (bg | p1) : (bg | p1 | p2);   // colour: right = cyan (G+B)
+
+assign VGA_R  = {8{r_on}};
+assign VGA_G  = {8{g_on}};
+assign VGA_B  = {8{b_on}};
 
 reg  [26:0] act_cnt;
 always @(posedge clk_sys) act_cnt <= act_cnt + 1'd1; 

@@ -174,11 +174,20 @@ Ported `/* Sound */` (gotcha.cpp 1052-1111).  Approach: faithful digital control
 
 > **Reference docs (added 2026-05-30):** `mister-framework-reference/` and `hdl-coding-guidelines/` are local reference trees (framework contracts + Cyclone V HDL guidelines).  Currently untracked — consider committing them and adding a pointer in CLAUDE.md.  `41-audio.md` and `90-anti-patterns.md` already shaped the Phase 7 audio code above.
 
-### Phase 8 — Polish
-- 3-channel colour video instead of monochrome OR.
-- DIP / OSD options: play time (POT1), etc.
-- Tune PLL VCO if timing slack is tight.
-- Capture release `.rbf` into `releases/<corename>_YYYYMMDD.rbf`.
+### Phase 8 — Polish (in progress, 2026-05-30)
+- **Video → 3 channels ✓.** `gotcha.sv` now outputs `video[2:0]` = {maze+score (F6.13), right player (VIDEO1), left player (VIDEO2)} instead of a pre-OR'd 8-bit luma.  emu.sv maps them to RGB:
+  - **Monochrome (default, `O[3]`=Off)** — any channel → white.  Faithful: DICE's gotcha.cpp sets no colour/overlay (default `MONOCHROME`), and real Gotcha was B&W (colour came from a cabinet overlay).
+  - **Colour (`O[3]`=On)** — white maze/score, **cyan** right player, **yellow** left player, so the two players are easy to tell apart.  Optional enhancement, off by default.
+- **Play-time OSD option ✓.** `O[7:6],Play Time,Normal,Short,Long,Longest` (POT1's role).  Selects the D8 divider half-period (gotcha.sv `d8_half` case): Normal 1Hz / Short 1.5Hz / Long 0.75Hz / Longest 0.5Hz.  Faster D8 → timer rolls over sooner → shorter game.  `play_time = status[7:6]` wired from emu.
+  - Status bits in use now: 0 reset, 3 Color, 6-7 Play Time, 121-122 aspect.  (5 is the vestigial template menumask — left alone.)
+- **Verified:** `verilator --lint-only` clean, **and a full Quartus 17.0.2 compile (2026-05-30)**:
+  - Analysis & Synthesis: 0 errors; no latch/truncation warnings on gotcha/gotcha_sound (the only Arcade-Gotcha.sv warnings are the framework's SD open-drain buffer conversions).
+  - **Fit: 18% ALMs** (7,487/41,910), 11,600 regs, 7% block RAM, 33 DSP (framework), 3 PLLs — lots of headroom.
+  - **Timing MET (TimeQuest): worst-case setup slack +0.749ns, hold +0.211ns, all checks positive, zero violated paths.**  → **PLL needs no tuning** (the "slack tight?" item is resolved).  ("Design is not fully constrained" is the normal MiSTer info — unconstrained I/O paths; the internal clocked paths all pass.)
+  - Bitstream built to `output_files/Arcade-Gotcha.rbf` (gitignored) for hardware testing.  **No `releases/` commit yet** — deferred until the right-player deadlock is fixed (don't cut a release with a known gameplay bug).
+- **Build/test workflow:** `/home/aberu/bin/quartus17` is the GUI wrapper; for headless builds export its env (QUARTUS_ROOTDIR=`/home/aberu/intelFPGA_lite/17.0/quartus`, the LD_LIBRARY_PATH + `LD_PRELOAD=/usr/lib/libffi.so.7`) and run `$QUARTUS_ROOTDIR/bin/quartus_sh --flow compile Arcade-Gotcha`.  Full flow ≈2–3 min after a warm synthesis.
+- **Optional future fidelity:** D8 is a divider, not the continuous POT1-driven 555 astable analog model — the OSD play-time option covers the user-facing behaviour.
+- **NOTE:** a clean build does NOT fix the right-player power-on deadlock (a logic bug, see the resume section) — that still needs the hardware test + the maze/comparator audit.  This `.rbf` is the artifact to test both that and the Phase 7 audio on hardware.
 
 ---
 
