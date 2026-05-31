@@ -20,6 +20,7 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/chips/ttl_9602.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/chips/ttl_74107.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/chips/ttl_74153.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/chips/ttl_74157.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/chips/ttl_555_mono.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/chips/ttl_latch.sv
 
 # Core top-level (chip-level netlist module)

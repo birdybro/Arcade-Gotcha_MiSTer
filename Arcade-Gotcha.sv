@@ -224,6 +224,7 @@ wire   [1:0] buttons;
 wire [127:0] status;
 wire  [10:0] ps2_key;
 wire  [31:0] joystick_0;
+wire  [31:0] joystick_1;
 
 hps_io #(.CONF_STR(CONF_STR)) hps_io
 (
@@ -239,6 +240,7 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 	.status_menumask({status[5]}),
 
 	.joystick_0(joystick_0),
+	.joystick_1(joystick_1),
 
 	.ps2_key(ps2_key)
 );
@@ -296,6 +298,13 @@ end
 wire COIN1  = (coin_hold  == 0);                     // HIGH idle, LOW while held
 wire START1 = (start_hold == 0);
 
+// Right player joystick — MiSTer layout: joystick_0[0]=R, [1]=L, [2]=D, [3]=U,
+// which is exactly the STICK1[3:0] order the gotcha core expects.
+wire [3:0] stick1 = joystick_0[3:0];
+
+// Left player joystick — second controller, same direction-bit layout.
+wire [3:0] stick2 = joystick_1[3:0];
+
 gotcha gotcha
 (
 	.clk_sys (clk_sys),
@@ -303,6 +312,8 @@ gotcha gotcha
 
 	.COIN1   (COIN1),
 	.START1  (START1),
+	.STICK1  (stick1),
+	.STICK2  (stick2),
 
 	.ce_pix  (ce_pix),
 	.HBlank  (HBlank),
