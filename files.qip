@@ -23,5 +23,6 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/chips/ttl_74157.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/chips/ttl_555_mono.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/chips/ttl_latch.sv
 
-# Core top-level (chip-level netlist module)
+# Core top-level (chip-level netlist module) + behavioural sound block
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/gotcha_sound.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/gotcha.sv

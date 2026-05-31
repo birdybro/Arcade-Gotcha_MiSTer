@@ -1604,54 +1604,20 @@ module gotcha (
     end
     assign A10_pin8 = ~a10_latched;
 
-    // E8 - 555 astable, the PROXIMITY-modulated oscillator (proximity "footstep"
-    //   sound).  DICE charges an RC cap from the 2-bit {D2.11,D2.3} value to set
-    //   E8's CV; we approximate it as a discrete 4-rate digital astable.  Index 0
-    //   = players aligned = fastest; indices 2/3 = far apart = near cutoff (slow).
-    //   Held low in ATTRACT (E8 /RST = ATTRACT_n).  Rates tunable on hardware.
-    wire [1:0] prox_idx = {D2_pin11, D2_pin3};
-    logic [22:0] e8_half;
-    always_comb begin
-        case (prox_idx)
-            2'd0:    e8_half = 23'd795_454;    // ~18 Hz (closest)
-            2'd1:    e8_half = 23'd1_431_818;  // ~10 Hz
-            default: e8_half = 23'd3_977_272;  // ~3.6 Hz (far / cutoff)
-        endcase
-    end
-    logic [22:0] e8_counter = '0;
-    logic        e8_q       = 1'b0;
-    always_ff @(posedge clk_sys) begin
-        if (!ATTRACT_n) begin
-            e8_counter <= '0;
-            e8_q       <= 1'b0;
-        end else if (e8_counter >= e8_half) begin
-            e8_counter <= '0;
-            e8_q       <= ~e8_q;
-        end else begin
-            e8_counter <= e8_counter + 23'd1;
-        end
-    end
-    assign E8_pin3 = e8_q;
-
-    // Audio mix.  Two 1-bit gated square sources, both idle HIGH:
-    //   M4c_pin3 = proximity (V8 ~1kHz tone pulsed at the E8 footstep rate),
-    //   M4c_pin6 = catch     (V8 tone gated on for the 728ms CATCHOS one-shot).
-    // DICE sums them through MIXER1/MIXER2; here each source maps to +/-amp and
-    // they add.  Steady (silent) levels are pure DC and the framework DC-blocker
-    // removes them; the framework IIR LPF anti-aliases the raw squares.
-    //   REGISTERED on clk_sys (not a bare combinational assign): audio_out commits
-    //   a sample only when it reads the same value on two consecutive clk_audio
-    //   edges, so AUDIO_L/R must be glitch-free and stable.  The audio content
-    //   changes at <=~1kHz (V8), far slower than clk_sys, so the registered value
-    //   easily holds stable across many clk_audio cycles.  (mister-framework-
-    //   reference/41-audio.md §2, §4.3, anti-pattern A.2.)
-    localparam signed [15:0] PROX_AMP  = 16'sd6000;
-    localparam signed [15:0] CATCH_AMP = 16'sd9000;
-    logic signed [15:0] audio_q = '0;
-    always_ff @(posedge clk_sys)
-        audio_q <= (M4c_pin3 ? PROX_AMP  : -PROX_AMP)
-                 + (M4c_pin6 ? CATCH_AMP : -CATCH_AMP);
-    assign audio = audio_q;
+    // PROXIMITY + E8 (proximity oscillator) + MIXER1/MIXER2 (audio summing) are
+    //   the analog/custom DICE sound chips — modeled behaviourally in a separate
+    //   module (rtl/gotcha_sound.sv) to keep this file the pure TTL netlist.
+    //   E8.3 feeds back into the netlist at L4.2 (via e8_out); the two digital
+    //   audio sources M4.3/M4.6 feed the mixer.
+    gotcha_sound u_sound (
+        .clk_sys   (clk_sys),
+        .prox_in   ({D2_pin11, D2_pin3}),  // PROXIMITY 2-bit value
+        .attract_n (ATTRACT_n),            // E8 /RST
+        .src_prox  (M4c_pin3),             // M4.3 proximity audio source
+        .src_catch (M4c_pin6),             // M4.6 catch audio source
+        .e8_out    (E8_pin3),              // -> L4.2
+        .audio     (audio)
+    );
 
     // ------------------------------------------------------------------
     // Module outputs
