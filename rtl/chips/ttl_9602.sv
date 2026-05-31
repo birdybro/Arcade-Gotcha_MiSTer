@@ -19,10 +19,12 @@
 //   While the pulse is active, Q=1, /Q=0; pulse retriggers if TRIG fires again.
 //   /RST = 0 forces Q = 0 immediately and stops the timer.
 module ttl_9602 #(
-    parameter int unsigned PULSE_A_CYCLES = 32'd104_500,    // ~7.3ms at 14.318 MHz
-    parameter int unsigned PULSE_B_CYCLES = 32'd10_432_000  // ~728ms
+    // Defaults scaled for clk_sys = 28.636 MHz (every instance overrides these).
+    parameter int unsigned PULSE_A_CYCLES = 32'd209_000,    // ~7.3ms at 28.636 MHz
+    parameter int unsigned PULSE_B_CYCLES = 32'd20_864_000  // ~728ms at 28.636 MHz
 ) (
     input  logic clk_sys,
+    input  logic rst,     // synchronous reset to power-on state
 
     // Half A
     input  logic pin3,    // /1RST
@@ -49,6 +51,10 @@ module ttl_9602 #(
     logic        q_b         = 1'b0;
 
     always_ff @(posedge clk_sys) begin
+        if (rst) begin
+            timer_a <= '0; q_a <= 1'b0; trig_a_prev <= 1'b0;
+            timer_b <= '0; q_b <= 1'b0; trig_b_prev <= 1'b0;
+        end else begin
         trig_a_prev <= trig_a;
         trig_b_prev <= trig_b;
 
@@ -74,6 +80,7 @@ module ttl_9602 #(
         end else if (timer_b != 32'd0) begin
             timer_b <= timer_b - 32'd1;
             if (timer_b == 32'd1) q_b <= 1'b0;
+        end
         end
     end
 

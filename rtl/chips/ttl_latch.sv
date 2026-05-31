@@ -14,6 +14,7 @@
 // See docs/DICE/chips/latch.cpp for the reference implementation.
 module ttl_latch (
     input  logic clk_sys,
+    input  logic rst,     // synchronous reset: re-run the power-on sequence
     input  logic pin1,    // /SET
     input  logic pin2,    // /RESET
     output logic pin3     // Q
@@ -26,7 +27,13 @@ module ttl_latch (
     logic       q            = 1'b0;
 
     always_ff @(posedge clk_sys) begin
-        if (!initialized) begin
+        if (rst) begin
+            // Re-arm the power-on pulse: Q low, replay the ~1µs init so the
+            // ATTRACT/game-state chain re-initialises exactly as at power-on.
+            init_counter <= '0;
+            initialized  <= 1'b0;
+            q            <= 1'b0;
+        end else if (!initialized) begin
             if (init_counter == INIT_HOLD_CYCLES - 1) begin
                 initialized <= 1'b1;
                 q           <= 1'b1;       // power-on reset transition: 0 → 1

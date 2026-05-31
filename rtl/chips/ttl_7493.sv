@@ -35,6 +35,7 @@ module ttl_7493 #(
     parameter int SELF_CASCADE = 0
 ) (
     input  logic clk_sys,
+    input  logic rst,     // synchronous reset to power-on state
     input  logic pin1,    // CKB  (SELF_CASCADE: synchronous count-enable)
     input  logic pin2,    // R0(1)
     input  logic pin3,    // R0(2)
@@ -55,7 +56,7 @@ module ttl_7493 #(
 
         always_ff @(posedge clk_sys) begin
             cka_prev <= pin14;
-            if (reset)                         cnt <= 4'b0;
+            if (rst | reset)                   begin cnt <= 4'b0; cka_prev <= 1'b0; end
             else if (~pin14 & cka_prev & pin1) cnt <= cnt + 4'd1;
         end
 
@@ -73,9 +74,11 @@ module ttl_7493 #(
         always_ff @(posedge clk_sys) begin
             cka_prev <= pin14;
             ckb_prev <= pin1;
-            if (reset) begin
+            if (rst | reset) begin
                 qa   <= 1'b0;
                 qbcd <= 3'b0;
+                cka_prev <= 1'b0;
+                ckb_prev <= 1'b0;
             end else begin
                 if (~pin14 & cka_prev) qa   <= ~qa;
                 if (~pin1  & ckb_prev) qbcd <= qbcd + 3'd1;

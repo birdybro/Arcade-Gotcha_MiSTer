@@ -17,6 +17,7 @@
 // TC = Q3 & Q2 & Q1 & Q0 & CET (combinational; goes HIGH the cycle Q reaches 15).
 module ttl_9316 (
     input  logic clk_sys,
+    input  logic rst,     // synchronous reset to power-on state
     input  logic pin1,    // /MR
     input  logic pin2,    // CP
     input  logic pin3,    // P0
@@ -36,11 +37,16 @@ module ttl_9316 (
     logic       cp_prev = 1'b0;
 
     always_ff @(posedge clk_sys) begin
-        cp_prev <= pin2;
-        if (pin2 & ~cp_prev) begin                  // rising edge of CP
-            if      (!pin1)            q <= 4'b0;
-            else if (!pin9)            q <= {pin6, pin5, pin4, pin3};
-            else if (pin7 & pin10)     q <= q + 4'd1;
+        if (rst) begin
+            q <= 4'b0;
+            cp_prev <= 1'b0;
+        end else begin
+            cp_prev <= pin2;
+            if (pin2 & ~cp_prev) begin                  // rising edge of CP
+                if      (!pin1)            q <= 4'b0;
+                else if (!pin9)            q <= {pin6, pin5, pin4, pin3};
+                else if (pin7 & pin10)     q <= q + 4'd1;
+            end
         end
     end
 

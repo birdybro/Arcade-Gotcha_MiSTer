@@ -297,8 +297,8 @@ module gotcha (
 
     // Phase 7 /* Sound */ section nets (gotcha.cpp lines 1052-1111).
     wire        A10_pin8;                                // CATCHOS latch output (-> B7 /2TR)
-    wire        D2_pin3;                                 // D2 g1 = Y ^ J2.Q1   -> PROXIMITY in[0]
-    wire        D2_pin11;                                // D2 g4 = K1.Q3 ^ D1.Q3 -> PROXIMITY in[1]
+    wire        D2_pin3;                                 // D2 g1 = Y ^ J2.Q1   -> PROXIMITY pin2 (index bit1)
+    wire        D2_pin11;                                // D2 g4 = K1.Q3 ^ D1.Q3 -> PROXIMITY pin1 (index bit0)
     wire        E8_pin3;                                 // E8 555 astable output (proximity oscillator)
     wire        L4_pin1;                                 // L4 g1 = ~(E8.3 | ATTRACT)  -> M4.1
     wire        M4c_pin3;                                // M4-chip g1 = ~(L4.1 & V8)  -> AUDIO (proximity)
@@ -325,7 +325,7 @@ module gotcha (
     //   accurate (and lets us drop the old CP1_IS_CLK_SYS hack).
     // ==================================================================
     logic CLOCK_14M = 1'b0;
-    always_ff @(posedge clk_sys) CLOCK_14M <= ~CLOCK_14M;
+    always_ff @(posedge clk_sys) if (reset) CLOCK_14M <= 1'b0; else CLOCK_14M <= ~CLOCK_14M;
 
     // ==================================================================
     // D8 - 555 astable (play-timer clock).  Original part: 555 with RC=(297kΩ,
@@ -347,7 +347,7 @@ module gotcha (
     logic [24:0] d8_counter = '0;
     logic        d8_q       = 1'b0;
     always_ff @(posedge clk_sys) begin
-        if (!ATTRACT_n) begin
+        if (reset | !ATTRACT_n) begin
             d8_counter <= '0;
             d8_q       <= 1'b0;
         end else if (d8_counter == d8_half - 25'd1) begin
@@ -372,6 +372,7 @@ module gotcha (
     // ==================================================================
     ttl_74107 u_J6 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1    (VCC),          // J1
         .pin2    (CLK_n),        // /Q1
         .pin3    (CLK),          // Q1
@@ -392,6 +393,7 @@ module gotcha (
     // ==================================================================
     ttl_7493 #(.SELF_CASCADE(1)) u_L6 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1    (VCC),          // count-enable (always)
         .pin2    (H6_Q1_n),      // R0(1)
         .pin3    (H6_Q1_n),      // R0(2)
@@ -410,6 +412,7 @@ module gotcha (
     // ==================================================================
     ttl_7493 #(.SELF_CASCADE(1)) u_M6 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1    (L6_tc),        // count-enable <- L6 terminal count
         .pin2    (H6_Q1_n),
         .pin3    (H6_Q1_n),
@@ -456,6 +459,7 @@ module gotcha (
     // ==================================================================
     ttl_7474 u_H6 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1    (VCC),         // /CLR1
         .pin2    (K6_out),      // D1
         .pin3    (CLK),         // CK1
@@ -480,6 +484,7 @@ module gotcha (
     // ==================================================================
     ttl_7493 #(.SELF_CASCADE(1)) u_H5 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1    (VCC),          // count-enable (always)
         .pin2    (H6_Q2_n),
         .pin3    (H6_Q2_n),
@@ -496,6 +501,7 @@ module gotcha (
     // ==================================================================
     ttl_7493 #(.SELF_CASCADE(1)) u_F5 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1    (VCC),          // count-enable (always)
         .pin2    (H6_Q2_n),
         .pin3    (H6_Q2_n),
@@ -513,6 +519,7 @@ module gotcha (
     // ==================================================================
     ttl_74107 u_D5 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1    (VCC),          // J1
         .pin2    (V256_n),       // /Q1
         .pin3    (V256),         // Q1
@@ -616,6 +623,7 @@ module gotcha (
     // ==================================================================
     ttl_7474 u_F4 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1    (J4_g4_out),    // /CLR1
         .pin2    (L5_g2_out),    // D1
         .pin3    (H2),           // CK1
@@ -702,6 +710,7 @@ module gotcha (
     //   FF2 (Phase 1 playfield): J2=VCC, K2=GND, CP2=F4./Q2, /CLR2=~V4.
     ttl_74107 u_B4 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1    (B5_Q2_n),     // J1
         .pin2    (B4_Q1_n),     // /Q1
         .pin3    (B4_Q1),       // Q1
@@ -757,6 +766,7 @@ module gotcha (
     //   FF2: CP2=V256, J=B4.Q1, K=VCC, /CLR=VCC.
     ttl_74107 u_B5 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1    (VCC),         // J1
         .pin2    (B5_Q1_n),     // /Q1
         .pin3    (B5_Q1),       // Q1
@@ -778,6 +788,7 @@ module gotcha (
     //   VBLANK_n_w is high (CET=1 during active video).
     ttl_9316 u_C4 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1    (VCC),         // /MR (no clear)
         .pin2    (HSYNC_n_w),   // CP
         .pin3    (B5_Q2),       // P0
@@ -798,6 +809,7 @@ module gotcha (
     //   Loads 0000 when /PE=0.  Cascaded with C4 via CEP = C4.RCO.
     ttl_9316 u_D4 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1    (VCC),         // /MR
         .pin2    (HSYNC_n_w),   // CP
         .pin3    (GND),         // P0
@@ -821,6 +833,7 @@ module gotcha (
     // K8 - 7490 play timer units (counts D8 ticks 0..9 once per second)
     ttl_7490 u_K8 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin14   (D8_out),       // CKA
         .pin1    (K8_QA),        // CKB <- QA (self-cascade)
         .pin12   (K8_QA),        // QA
@@ -836,6 +849,7 @@ module gotcha (
     // L8 - 7490 play timer tens (clocked by K8.QD = ones rollover)
     ttl_7490 u_L8 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin14   (K8_QD),
         .pin1    (L8_QA),
         .pin12   (L8_QA),
@@ -851,6 +865,7 @@ module gotcha (
     // G8 - 7490 catch counter low digit (clocked by CATCHOS_n - one-shot from B7)
     ttl_7490 u_G8 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin14   (CATCHOS_n),
         .pin1    (G8_QA),
         .pin12   (G8_QA),
@@ -867,6 +882,7 @@ module gotcha (
     //      drives FF2 via self-cascade pin3 -> pin9).
     ttl_74107 u_J8 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1    (VCC),          // J1
         .pin2    (J8_Q1_n),
         .pin3    (J8_Q1),
@@ -1041,6 +1057,7 @@ module gotcha (
         .PULSE_B_CYCLES(32'd20_864_000)
     ) u_B7 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin3    (VCC),            // /1RST
         .pin4    (GND),             // 1TR
         .pin5    (COIN_n),          // /1TR
@@ -1059,6 +1076,7 @@ module gotcha (
     //          /CLR = COIN (clears when no coin held), /PR = VCC.
     ttl_7474 u_K7 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1    (COIN),         // /CLR1 = COIN (held HIGH while coin pressed)
         .pin2    (COIN),         // D1
         .pin3    (B7_pin7),      // CK1
@@ -1078,6 +1096,7 @@ module gotcha (
     //   pin2=/RESET=K7./Q1 (= ~K7.Q1).  Output pin3 feeds J5 inv 6 → Q.
     ttl_latch u_LATCH (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1    (D6_g4),        // /SET
         .pin2    (K7_Q1_n),      // /RESET
         .pin3    (LATCH_pin3)
@@ -1089,6 +1108,7 @@ module gotcha (
     //     FF2:         D = ATTRACT, CK = START1 (button), /CLR = B6./Q1, /PR = VCC.
     ttl_7474 u_B6 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1    (COIN_n),       // /CLR1
         .pin2    (B6_Q2),        // D1
         .pin3    (V256),         // CK1
@@ -1110,6 +1130,7 @@ module gotcha (
     //   pattern gates the LATCH set and the START-clears-ATTRACT path.
     ttl_7474 u_C6 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1    (K7_Q1_n),      // /CLR1
         .pin2    (C6_Q2),        // D1
         .pin3    (ATTRACT),      // CK1
@@ -1132,6 +1153,7 @@ module gotcha (
     //                /PR2=0 → forces ATTRACT=1 (attract on at power-on).
     ttl_7474 u_C7 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1    (VCC),          // /CLR1 (FF1 unused)
         .pin2    (GND),          // D1
         .pin3    (GND),          // CK1
@@ -1184,6 +1206,7 @@ module gotcha (
     //   FF1 CK = D3_pin13 (BUMP1/~J edge);  FF2 CK = D3_pin10 (J/BUMP1 edge).
     ttl_7474 u_C3 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1  (VRESET_n), .pin2  (VCC),      .pin3  (D3_pin13), .pin4  (VCC),
         .pin5  (C3_Q1),    .pin6  (C3_Q1_n),
         .pin8  (C3_Q2_n),  .pin9  (C3_Q2),
@@ -1205,6 +1228,7 @@ module gotcha (
     //   FF2: D=A1.pin4, CK=E4_g6, /CLR=VCC, /PR=C3.Q2_n.
     ttl_7474 u_B2 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1  (VCC),      .pin2  (A1_pin1),  .pin3  (E4_g6),    .pin4  (J4_g3),
         .pin5  (B2_Q1),    .pin6  (B2_Q1_n),
         .pin8  (B2_Q2_n),  .pin9  (B2_Q2),
@@ -1216,6 +1240,7 @@ module gotcha (
     //   FF2: D=A1.pin10, CK=E4_g6, /CLR=VCC, /PR=D3.pin1.  Q2 = "C".
     ttl_7474 u_B3 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1  (VCC),      .pin2  (A1_pin13), .pin3  (E4_g6),    .pin4  (C3_Q1_n),
         .pin5  (B3_Q1),    .pin6  (B3_Q1_n),
         .pin8  (B3_Q2_n),  .pin9  (B3_Q2),
@@ -1227,6 +1252,7 @@ module gotcha (
     //   FF2: D=M (E3.Q2), CK=C3.Q2, /CLR=VCC,   /PR=E4_g6.
     ttl_7474 u_C2 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1  (E4_g6),    .pin2  (G1_Q[1]),  .pin3  (C3_Q1),    .pin4  (VCC),
         .pin5  (C2_Q1),    .pin6  (C2_Q1_n),
         .pin8  (C2_Q2_n),  .pin9  (C2_Q2),
@@ -1236,8 +1262,8 @@ module gotcha (
     // D2 - 7486 quad XOR.
     //   g2: B2./Q2 ^ C2./Q2 -> D2_pin6 (-> D3 g2).
     //   g3: B3./Q1 ^ C2.Q1  -> D_sig ("D").  (gotcha.cpp:774: "B3",6 = FF1 /Q1.)
-    //   g1 (Phase 7): Y(J2./Q2) ^ J2.Q1  -> D2_pin3  -> PROXIMITY in[0]
-    //   g4 (Phase 7): K1.Q3   ^ X(D1.Q3) -> D2_pin11 -> PROXIMITY in[1]
+    //   g1 (Phase 7): Y(J2./Q2) ^ J2.Q1  -> D2_pin3  -> PROXIMITY pin2 (index bit1)
+    //   g4 (Phase 7): K1.Q3   ^ X(D1.Q3) -> D2_pin11 -> PROXIMITY pin1 (index bit0)
     ttl_7486 u_D2 (
         .pin1  (J2_Q2_n),  .pin2  (J2_Q1),    .pin3  (D2_pin3),
         .pin4  (B2_Q2_n),  .pin5  (C2_Q2_n),  .pin6  (D2_pin6),
@@ -1270,6 +1296,7 @@ module gotcha (
     //   Fires when BUMP1 falls (right player touches a maze wall).
     ttl_555_mono #(.PULSE_CYCLES(32'd2_579_750)) u_B8 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin2 (BUMP1),
         .pin3 (B8_pin3),
         .pin4 (VCC)
@@ -1282,6 +1309,7 @@ module gotcha (
     //   Parallel-load value {VCC,GND,B,A}.
     ttl_9316 u_E3 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1  (OO),        .pin2  (CLK),
         .pin3  (A_sig),     .pin4  (B_sig),     .pin5  (GND),      .pin6  (VCC),
         .pin7  (VCC),       .pin9  (HLD1),      .pin10 (HBLANK_n_w),
@@ -1293,6 +1321,7 @@ module gotcha (
     //   CP=CLK (same as E3), CEP=E3.RCO -> synchronous carry, no ripple lag.
     ttl_9316 u_F3 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1  (OO),        .pin2  (CLK),
         .pin3  (GND),       .pin4  (GND),       .pin5  (GND),      .pin6  (VCC),
         .pin7  (E3_RCO),    .pin9  (HLD1),      .pin10 (VCC),
@@ -1315,6 +1344,7 @@ module gotcha (
     assign J2_carry_L = H3_RCO & J3_RCO;
     ttl_74107 u_J2 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1    (J2_carry_L),// J1  = left carry (atomic with H3/J3)
         .pin2    (J2_Q1_n),
         .pin3    (J2_Q1),     // Q1 = left "X" -> J1.1
@@ -1346,6 +1376,7 @@ module gotcha (
     //   FF2: D = M (E3.Q2), /CLR = M, /PR = VCC.
     ttl_7474 u_F2 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1  (VCC),      .pin2  (F2_Q2_n),  .pin3  (CLK),      .pin4  (VCC),
         .pin5  (F2_Q1),    .pin6  (F2_Q1_n),
         .pin8  (F2_Q2_n),  .pin9  (F2_Q2),
@@ -1366,6 +1397,7 @@ module gotcha (
     //   Parallel-load value {VCC,GND,D,C}.
     ttl_9316 u_G1 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1  (OO),        .pin2  (HSYNC_n_w),
         .pin3  (B3_Q2),     .pin4  (D_sig),     .pin5  (GND),      .pin6  (VCC),
         .pin7  (VCC),       .pin9  (E1_pin8),   .pin10 (VBLANK_n_w),
@@ -1377,6 +1409,7 @@ module gotcha (
     //   CP=HSYNC_n (same as G1), CEP=G1.RCO -> synchronous carry.
     ttl_9316 u_D1 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1  (OO),        .pin2  (HSYNC_n_w),
         .pin3  (GND),       .pin4  (GND),       .pin5  (GND),      .pin6  (GND),
         .pin7  (G1_RCO),    .pin9  (E1_pin8),   .pin10 (VCC),
@@ -1420,6 +1453,7 @@ module gotcha (
     //   FF1 CK = K3.1;  FF2 CK = K3.4.
     ttl_7474 u_L3 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1  (VRESET_n), .pin2  (VCC),      .pin3  (K3_pin1),  .pin4  (VCC),
         .pin5  (L3_Q1),    .pin6  (L3_Q1_n),
         .pin8  (L3_Q2_n),  .pin9  (L3_Q2),
@@ -1440,6 +1474,7 @@ module gotcha (
     //   FF2: D=M1.4,  CK=M4c_pin11, /CLR=K3.13,    /PR=VCC.   Q2 = M4-chip "E".
     ttl_7474 u_M3 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1  (VCC),      .pin2  (M1_pin1),  .pin3  (M4c_pin11), .pin4  (L3_Q2_n),
         .pin5  (M3_Q1),    .pin6  (M3_Q1_n),
         .pin8  (M3_Q2_n),  .pin9  (M3_Q2),
@@ -1451,6 +1486,7 @@ module gotcha (
     //   FF2: D=M1.10, CK=M4c_pin11, /CLR=L3.6(/Q1),/PR=VCC.  Q1 = "G".
     ttl_7474 u_M2 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1  (VCC),      .pin2  (M1_pin13), .pin3  (M4c_pin11), .pin4  (K4_g2_out),
         .pin5  (M2_Q1),    .pin6  (M2_Q1_n),
         .pin8  (M2_Q2_n),  .pin9  (M2_Q2),
@@ -1462,6 +1498,7 @@ module gotcha (
     //   FF2: D=O(J3.Q1), CK=L3.9(Q2), /CLR=VCC,        /PR=M4c_pin11.
     ttl_7474 u_L2 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1  (M4c_pin11),.pin2  (L1_Q[1]),  .pin3  (L3_Q1),    .pin4  (VCC),
         .pin5  (L2_Q1),    .pin6  (L2_Q1_n),
         .pin8  (L2_Q2_n),  .pin9  (L2_Q2),
@@ -1507,6 +1544,7 @@ module gotcha (
     //   Left player collision one-shot (mirror B8).
     ttl_555_mono #(.PULSE_CYCLES(32'd2_579_750)) u_C8 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin2 (BUMP2),
         .pin3 (C8_pin3),
         .pin4 (VCC)
@@ -1519,6 +1557,7 @@ module gotcha (
     //   Parallel-load value {VCC,GND,F,E}.
     ttl_9316 u_J3 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1  (OO2),       .pin2  (CLK),
         .pin3  (E_sig),     .pin4  (K3_pin10),  .pin5  (GND),      .pin6  (VCC),
         .pin7  (VCC),       .pin9  (HLD2),      .pin10 (HBLANK_n_w),
@@ -1530,6 +1569,7 @@ module gotcha (
     //   CP=CLK (same as J3), CEP=J3.RCO -> synchronous carry.
     ttl_9316 u_H3 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1  (OO2),       .pin2  (CLK),
         .pin3  (GND),       .pin4  (GND),       .pin5  (GND),      .pin6  (VCC),
         .pin7  (J3_RCO),    .pin9  (HLD2),      .pin10 (VCC),
@@ -1552,6 +1592,7 @@ module gotcha (
     //   Parallel-load value {VCC,GND,H,G}.
     ttl_9316 u_L1 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1  (OO2),       .pin2  (HSYNC_n_w),
         .pin3  (M2_Q1),     .pin4  (K2_pin6),   .pin5  (GND),      .pin6  (VCC),
         .pin7  (VCC),       .pin9  (E1_pin6),   .pin10 (VBLANK_n_w),
@@ -1563,6 +1604,7 @@ module gotcha (
     //   CP=HSYNC_n (same as L1), CEP=L1.RCO -> synchronous carry.
     ttl_9316 u_K1 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin1  (OO2),       .pin2  (HSYNC_n_w),
         .pin3  (GND),       .pin4  (GND),       .pin5  (GND),      .pin6  (GND),
         .pin7  (L1_RCO),    .pin9  (E1_pin6),   .pin10 (VCC),
@@ -1582,6 +1624,7 @@ module gotcha (
     //   Left-counter reset one-shot (homes J3/H3/L1/K1 via OO2).
     ttl_555_mono #(.PULSE_CYCLES(32'd3_146_000)) u_K10 (
         .clk_sys (clk_sys),
+        .rst     (reset),
         .pin2 (J10_pin3),
         .pin3 (K10_pin3),
         .pin4 (VCC)
@@ -1615,8 +1658,8 @@ module gotcha (
     //   (DICE 30ns deglitch) collapses away since CATCH_n is already synchronous.
     logic a10_latched = 1'b0;
     always_ff @(posedge clk_sys) begin
-        if      (!VRESET_n) a10_latched <= 1'b0;   // reset each frame
-        else if (!CATCH_n)  a10_latched <= 1'b1;   // set on catch
+        if      (reset | !VRESET_n) a10_latched <= 1'b0;   // reset each frame
+        else if (!CATCH_n)          a10_latched <= 1'b1;   // set on catch
     end
     assign A10_pin8 = ~a10_latched;
 
@@ -1627,7 +1670,8 @@ module gotcha (
     //   audio sources M4.3/M4.6 feed the mixer.
     gotcha_sound u_sound (
         .clk_sys   (clk_sys),
-        .prox_in   ({D2_pin11, D2_pin3}),  // PROXIMITY 2-bit value
+        .rst       (reset),
+        .prox_in   ({D2_pin3, D2_pin11}),  // PROXIMITY value: bit0=D2.11(pin1), bit1=D2.3(pin2)
         .attract_n (ATTRACT_n),            // E8 /RST
         .src_prox  (M4c_pin3),             // M4.3 proximity audio source
         .src_catch (M4c_pin6),             // M4.6 catch audio source
@@ -1640,7 +1684,7 @@ module gotcha (
     // ------------------------------------------------------------------
     // ce_pix: rising edge of CLK (= 7.159 MHz pixel-rate strobe in clk_sys)
     logic clk_prev = 1'b0;
-    always_ff @(posedge clk_sys) clk_prev <= CLK;
+    always_ff @(posedge clk_sys) if (reset) clk_prev <= 1'b0; else clk_prev <= CLK;
 
     assign ce_pix = CLK & ~clk_prev;
     assign HBlank = HBLANK_w;

@@ -31,7 +31,8 @@
 // ======================================================================
 module gotcha_sound (
     input  logic               clk_sys,
-    input  logic        [1:0]  prox_in,     // {D2_pin11, D2_pin3} proximity value
+    input  logic               rst,         // synchronous reset to power-on state
+    input  logic        [1:0]  prox_in,     // proximity index = {D2.3 (pin2), D2.11 (pin1)} (matches DICE inputs&3)
     input  logic               attract_n,   // E8 /RST (held low in attract)
     input  logic               src_prox,    // M4.3 proximity audio source (V8-gated)
     input  logic               src_catch,   // M4.6 catch audio source (V8 & CATCHOS)
@@ -60,9 +61,14 @@ module gotcha_sound (
     logic signed [31:0] v_cap   = V48;   // CV; power up at "far" (idle)
     logic        [5:0]  prox_div = '0;
     always_ff @(posedge clk_sys) begin
-        prox_div <= prox_div + 6'd1;
-        if (prox_div == 6'd0)
-            v_cap <= v_cap + ((v_target - v_cap) >>> 6);
+        if (rst) begin
+            v_cap    <= V48;
+            prox_div <= '0;
+        end else begin
+            prox_div <= prox_div + 6'd1;
+            if (prox_div == 6'd0)
+                v_cap <= v_cap + ((v_target - v_cap) >>> 6);
+        end
     end
 
     // ---- E8: behavioural 555 astable, CV = v_cap --------------------
@@ -75,7 +81,11 @@ module gotcha_sound (
     logic        [9:0]  e8_div = '0;
     always_ff @(posedge clk_sys) begin
         e8_div <= e8_div + 10'd1;
-        if (!attract_n) begin
+        if (rst) begin
+            v_e8 <= '0;
+            e8_q <= 1'b0;
+            e8_div <= '0;
+        end else if (!attract_n) begin
             v_e8 <= '0;
             e8_q <= 1'b0;
         end else if (e8_div == 10'd0) begin
@@ -98,7 +108,8 @@ module gotcha_sound (
     localparam signed [15:0] PROX_AMP  = 16'sd6000;   // 0.2 weight
     logic signed [15:0] audio_q = '0;
     always_ff @(posedge clk_sys)
-        audio_q <= (src_catch ? CATCH_AMP : -CATCH_AMP)
-                 + (src_prox  ? PROX_AMP  : -PROX_AMP);
+        if (rst) audio_q <= '0;
+        else     audio_q <= (src_catch ? CATCH_AMP : -CATCH_AMP)
+                          + (src_prox  ? PROX_AMP  : -PROX_AMP);
     assign audio = audio_q;
 endmodule

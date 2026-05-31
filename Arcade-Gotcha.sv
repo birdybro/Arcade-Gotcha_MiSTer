@@ -239,7 +239,7 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 
 	.buttons(buttons),
 	.status(status),
-	.status_menumask({status[5]}),
+	.status_menumask(0),   // no OSD options use visibility gating
 
 	.joystick_0(joystick_0),
 	.joystick_1(joystick_1),

@@ -4,7 +4,21 @@ Path from current state (chip-level sync gen, blank 240p signal) to a fully play
 
 ---
 
-## 📍 Resume here — Phases 5-7 written; right-player deadlock + hardware/ear test still open
+## 📍 Resume here — Phases 0-8 complete + Quartus-verified + DICE/docs audit done; right-player deadlock + hardware test still open
+
+**Phases 0-8 are all implemented.** Full Quartus 17.0.2 compile passes (0 errors, 18% ALMs, timing met — setup slack +0.749ns). See `quartus-headless-build` memory for the build command.
+
+**DICE + reference-docs audit (2026-05-30):** ran a 4-way parallel review (DICE netlist correctness, TTL primitive models, hdl-coding-guidelines compliance, MiSTer framework compliance). Outcome: the netlist translation is faithful (0 confirmed translation bugs), primitives + behavioural models match DICE, code is guideline-compliant, framework-compliant. Actions taken:
+- **Fixed CONFIRMED audio bug:** PROXIMITY 2-bit input was byte-swapped (`prox_in` order) vs DICE `inputs&3` — two proximity states mapped to the wrong E8 control voltage. Corrected to `{D2_pin3, D2_pin11}`.
+- **Implemented a real synchronous reset** (was a dead port): added an `rst` input to every stateful primitive + `gotcha_sound`, wired `.rst(reset)` to all 44 clocked instances + the 4 inline FFs (CLOCK_14M/D8/A10/clk_prev). `ttl_latch.rst` re-runs the power-on pulse so OSD-Reset re-initialises the game. See the CLAUDE.md "Reset convention".
+- **Cleanups:** `ttl_7490` R9-over-R0 reset priority (matches real chip + DICE; was dormant, R9 grounded); `ttl_9602` default params rescaled to 28.636 MHz; `status_menumask(0)` (was inert `status[5]`).
+- Lint clean; Quartus re-verify in progress.
+
+**Still open (need hardware):** the right-player power-on deadlock (below), and the Phase 7 audio ear-test (levels/τ).
+
+---
+
+### (earlier) Phases 5-7 status
 
 **Status (2026-05-30):** Phases 5 (Right player), 6 (Left player), and 7 (Sound) are all translated and lint clean.  Phases 5-6 are committed (`fc04202`, pushed); **Phase 7 is uncommitted**.  The core is now feature-complete except Phase 8 polish (3-channel colour video, DIP/POT options, release `.rbf`).
 

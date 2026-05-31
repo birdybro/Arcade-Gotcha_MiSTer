@@ -17,6 +17,7 @@
 // detector is sufficient and accurate for all instances.
 module ttl_74107 (
     input  logic clk_sys,
+    input  logic rst,     // synchronous reset to power-on state
     input  logic pin1,    // J1
     output logic pin2,    // /Q1
     output logic pin3,    // Q1
@@ -36,6 +37,10 @@ module ttl_74107 (
     logic cp2_prev = 1'b0;
 
     always_ff @(posedge clk_sys) begin
+        if (rst) begin
+            q1 <= 1'b0; q2 <= 1'b0;
+            cp1_prev <= 1'b0; cp2_prev <= 1'b0;
+        end else begin
         cp1_prev <= pin12;
         cp2_prev <= pin9;
 
@@ -59,6 +64,7 @@ module ttl_74107 (
                 2'b11: q2 <= ~q2;
                 default: ;
             endcase
+        end
         end
     end
 

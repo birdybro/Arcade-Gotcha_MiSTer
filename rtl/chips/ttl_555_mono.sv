@@ -18,6 +18,7 @@ module ttl_555_mono #(
     parameter int unsigned PULSE_CYCLES = 32'd2_579_750   // ~90ms at 28.636 MHz
 ) (
     input  logic clk_sys,
+    input  logic rst,     // synchronous reset to power-on state
     input  logic pin2,    // /TR  (trigger, active-low)
     output logic pin3,    // Q    (output)
     input  logic pin4     // /RST (reset, active-low)
@@ -27,16 +28,22 @@ module ttl_555_mono #(
     logic        q         = 1'b0;
 
     always_ff @(posedge clk_sys) begin
-        trig_prev <= pin2;
-        if (!pin4) begin
-            timer <= '0;
+        if (rst) begin
+            timer     <= '0;
+            trig_prev <= 1'b1;
+            q         <= 1'b0;
         end else begin
-            if      (~pin2 & trig_prev)  timer <= PULSE_CYCLES;   // /TR falling edge
-            else if (timer != 32'd0)     timer <= timer - 32'd1;
+            trig_prev <= pin2;
+            if (!pin4) begin
+                timer <= '0;
+            end else begin
+                if      (~pin2 & trig_prev)  timer <= PULSE_CYCLES;   // /TR falling edge
+                else if (timer != 32'd0)     timer <= timer - 32'd1;
+            end
+            // Q is high while the trigger is held low or the interval is running;
+            // /RST forces it low.
+            q <= pin4 & (~pin2 | (timer != 32'd0));
         end
-        // Q is high while the trigger is held low or the interval is running;
-        // /RST forces it low.
-        q <= pin4 & (~pin2 | (timer != 32'd0));
     end
 
     assign pin3 = q;
