@@ -190,9 +190,9 @@ assign HDMI_FREEZE = 0;
 assign HDMI_BLACKOUT = 0;
 assign HDMI_BOB_DEINT = 0;
 
-assign AUDIO_S = 0;
-assign AUDIO_L = 0;
-assign AUDIO_R = 0;
+assign AUDIO_S = 1;               // signed samples
+assign AUDIO_L = audio;
+assign AUDIO_R = audio;           // mono — same on both channels
 assign AUDIO_MIX = 0;
 
 assign LED_DISK = 0;
@@ -263,6 +263,7 @@ wire        VBlank;
 wire        VSync;
 wire        ce_pix;
 wire [7:0]  video;
+wire signed [15:0] audio;
 
 // Coin / Start come from the joystick (defined by the "J1,Coin,Start;" line
 // in CONF_STR): joystick_0[4] = Coin, joystick_0[5] = Start (MiSTer bit
@@ -321,7 +322,8 @@ gotcha gotcha
 	.VBlank  (VBlank),
 	.VSync   (VSync),
 
-	.video   (video)
+	.video   (video),
+	.audio   (audio)
 );
 
 assign CLK_VIDEO = clk_sys;

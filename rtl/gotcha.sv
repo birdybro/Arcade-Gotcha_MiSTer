@@ -61,7 +61,8 @@ module gotcha (
     output logic        VBlank,
     output logic        VSync,
 
-    output logic [7:0]  video
+    output logic [7:0]  video,
+    output logic signed [15:0] audio        // mono PCM (signed), Phase 7
 );
 
     // ------------------------------------------------------------------
@@ -71,17 +72,11 @@ module gotcha (
     wire GND = 1'b0;
 
     // ------------------------------------------------------------------
-    // Stubs for signals generated in later-phase logic.
-    // CATCHOS_n: produced by B7 9602 half B in /* Coin */, but its trigger
-    // path passes through A10 (a 7400 in /* Sound */) which isn't translated
-    // yet.  We instantiate B7 half B with the A10.pin8 input stubbed to VCC
-    // below, so this declaration is just the named-signal alias the rest of
-    // the file expects.  Once /* Sound */ lands, drop the stub and rename
-    // B7_pin9 → CATCHOS_n directly.
+    // Signal aliases for cross-phase nets:
     // M4: real, produced by H4 gate 2 in /* M4 */ (Phase 3).
-    // ATTRACT_n, START, START_n: now real (Phase 4) — produced by the /* Coin */
-    // chain below.  Aliased to specific FF outputs.
-    wire        A10_pin8_stub = VCC;
+    // ATTRACT_n, START, START_n: real (Phase 4) — produced by the /* Coin */ chain.
+    // CATCHOS / CATCHOS_n: B7 9602 half B; its /2TR is now driven by the A10
+    //   CATCHOS latch (Phase 7 /* Sound */) instead of the old VCC stub.
 
     // ------------------------------------------------------------------
     // Net declarations (names mirror gotcha.cpp #defines)
@@ -289,16 +284,23 @@ module gotcha (
     wire        F1_pin13;                                // F1 7402 gate4 = ~(K2.11 | K2.3)
     wire        XY_pin8;                                 // XY 7410 gate3 (right-wall collision fix)
     wire        J10_pin3, J10_pin8;                      // J10 7400 gate outputs
-    wire        nc_M4c_pin3, nc_M4c_pin6;                // M4-chip gates 1,2 -> AUDIO (Phase 7)
-    wire        nc_L4_pin1, nc_L4_pin10, nc_L4_pin13;    // L4 gates 1,3,4 (sound, Phase 7)
+    wire        nc_L4_pin10, nc_L4_pin13;               // L4 gates 3,4 unused (sound)
     wire        nc_XY_pin6, nc_XY_pin12;                 // XY 7410 gates 1,2 unused
     wire        nc_J10_g4;                               // J10 7400 gate 4 unused
+
+    // Phase 7 /* Sound */ section nets (gotcha.cpp lines 1052-1111).
+    wire        A10_pin8;                                // CATCHOS latch output (-> B7 /2TR)
+    wire        D2_pin3;                                 // D2 g1 = Y ^ J2.Q1   -> PROXIMITY in[0]
+    wire        D2_pin11;                                // D2 g4 = K1.Q3 ^ D1.Q3 -> PROXIMITY in[1]
+    wire        E8_pin3;                                 // E8 555 astable output (proximity oscillator)
+    wire        L4_pin1;                                 // L4 g1 = ~(E8.3 | ATTRACT)  -> M4.1
+    wire        M4c_pin3;                                // M4-chip g1 = ~(L4.1 & V8)  -> AUDIO (proximity)
+    wire        M4c_pin6;                                // M4-chip g2 = ~(V8 & CATCHOS) -> AUDIO (catch)
 
     // Stubs for chip gates not yet wired in any phase
     // (no remaining J5 inverter stubs)
     // (no remaining J4 stubs — gates 2,3 now wired in Phase 5)
     // (no remaining H4 stubs — gate 3 now wired in Phase 5)
-    wire        nc_D2_g1, nc_D2_g4;                      // D2 7486 gates 1,4 unused (Sound, Phase 7)
     wire        nc_F1_g3;                                // F1 7402 gate 3 unused
     wire        K4_g2_out;                               // K4 7402 gate 2 = ~(M2.Q2 | ATTRACT) -> M2 /PR1
     // (no remaining D6 stubs)
@@ -1028,7 +1030,7 @@ module gotcha (
         .pin5    (COIN_n),          // /1TR
         .pin6    (B7_pin6),         // 1Q (unused)
         .pin7    (B7_pin7),         // /1Q → K7.CK1
-        .pin11   (A10_pin8_stub),   // /2TR (stubbed until /* Sound */)
+        .pin11   (A10_pin8),         // /2TR = A10 CATCHOS latch Q (Phase 7)
         .pin12   (START),           // 2TR
         .pin13   (ATTRACT_n),       // /2RST
         .pin10   (B7_CATCHOS),      // 2Q  = CATCHOS
@@ -1215,14 +1217,16 @@ module gotcha (
         .pin10 (E4_g6),    .pin11 (C3_Q2),    .pin12 (E3_Q[2]),  .pin13 (VCC)
     );
 
-    // D2 - 7486 quad XOR.  g2: B2./Q2 ^ C2./Q2 -> D2_pin6 (-> D3 g2).
-    //                      g3: B3./Q1 ^ C2.Q1  -> D_sig ("D").  g1,g4 unused.
-    //   (gotcha.cpp:774 wires "B3",6 = FF1's /Q1 to D2.pin9.)
+    // D2 - 7486 quad XOR.
+    //   g2: B2./Q2 ^ C2./Q2 -> D2_pin6 (-> D3 g2).
+    //   g3: B3./Q1 ^ C2.Q1  -> D_sig ("D").  (gotcha.cpp:774: "B3",6 = FF1 /Q1.)
+    //   g1 (Phase 7): Y(J2./Q2) ^ J2.Q1  -> D2_pin3  -> PROXIMITY in[0]
+    //   g4 (Phase 7): K1.Q3   ^ X(D1.Q3) -> D2_pin11 -> PROXIMITY in[1]
     ttl_7486 u_D2 (
-        .pin1  (GND),      .pin2  (GND),      .pin3  (nc_D2_g1),
+        .pin1  (J2_Q2_n),  .pin2  (J2_Q1),    .pin3  (D2_pin3),
         .pin4  (B2_Q2_n),  .pin5  (C2_Q2_n),  .pin6  (D2_pin6),
         .pin9  (B3_Q1_n),  .pin10 (C2_Q1),    .pin8  (D_sig),
-        .pin12 (GND),      .pin13 (GND),      .pin11 (nc_D2_g4)
+        .pin12 (K1_Q[3]),  .pin13 (D1_Q[3]),  .pin11 (D2_pin11)
     );
 
     // E5 - 7430 8-input NAND -> PRES.  Inputs: H6./Q1, M1(~V32), V8, V128,
@@ -1463,18 +1467,21 @@ module gotcha (
     // M4 (chip) - 7400 quad NAND (mirror E4; distinct from the M4 *net* = H4.6).
     //   g3: M3.Q2 & VRESET   -> pin8  = E_sig ("E", J3.P0 load)
     //   g4: L4.g2 & ATTRACT_n-> pin11 = M4c_pin11 (left dir strobe = C8|HLD2)
-    //   g1,g2 -> AUDIO (Phase 7): inputs wired where available, outputs left nc.
+    //   g1 (Phase 7): L4.1 & V8     -> pin3 = M4c_pin3 (proximity audio source)
+    //   g2 (Phase 7): V8 & CATCHOS  -> pin6 = M4c_pin6 (catch audio source)
     ttl_7400 u_M4 (
-        .pin1  (GND),      .pin2  (V8),       .pin3  (nc_M4c_pin3),  // g1 (Sound)
-        .pin4  (V8),       .pin5  (B7_CATCHOS),.pin6 (nc_M4c_pin6),  // g2 (Sound)
+        .pin1  (L4_pin1),  .pin2  (V8),       .pin3  (M4c_pin3),     // g1 audio
+        .pin4  (V8),       .pin5  (B7_CATCHOS),.pin6 (M4c_pin6),     // g2 audio
         .pin9  (M3_Q2),    .pin10 (VRESET),   .pin8  (E_sig),        // g3 = "E"
         .pin12 (L4_pin4),  .pin13 (ATTRACT_n),.pin11 (M4c_pin11)     // g4 = left strobe
     );
 
-    // L4 - 7402 quad NOR.  g2: C8.3 NOR HLD2 -> pin4 = L4_pin4 (-> M4.12).
-    //   g1,g3,g4 are Sound (Phase 7) — stubbed.
+    // L4 - 7402 quad NOR.
+    //   g2: C8.3 NOR HLD2       -> pin4 = L4_pin4 (-> M4.12).
+    //   g1 (Phase 7): E8.3 NOR ATTRACT -> pin1 = L4_pin1 (-> M4.1, proximity gate).
+    //   g3,g4 unused.
     ttl_7402 u_L4 (
-        .pin1  (nc_L4_pin1), .pin2  (GND),     .pin3  (GND),
+        .pin1  (L4_pin1),    .pin2  (E8_pin3), .pin3  (ATTRACT),
         .pin4  (L4_pin4),    .pin5  (C8_pin3), .pin6  (HLD2),
         .pin8  (GND),        .pin9  (GND),     .pin10 (nc_L4_pin10),
         .pin11 (GND),        .pin12 (GND),     .pin13 (nc_L4_pin13)
@@ -1574,6 +1581,77 @@ module gotcha (
         .pin9  (CATCH_n),  .pin10 (XY_pin8),  .pin8  (J10_pin8),
         .pin12 (GND),      .pin13 (GND),      .pin11 (nc_J10_g4)
     );
+
+    // ==================================================================
+    // ===== /* Sound */ (gotcha.cpp lines 1052-1111) ===================
+    // ==================================================================
+
+    // A10 - the CATCHOS trigger latch.  In the schematic this is two cross-
+    //   coupled 7400 NAND gates (g3/g4) forming an SR latch.  A pure combinational
+    //   translation would be a bistable feedback loop — a synthesis hazard
+    //   (hdl-coding-guidelines anti-pattern #3: "combinational feedback loop";
+    //   the only other comb loops here are the Phase-0 HBLANK/VBLANK latches).
+    //   Per that guideline's fix (close the loop through a flop) and the
+    //   ttl_latch.sv precedent, model it as a clocked SR latch, identical behaviour:
+    //     SET   = CATCH_n low  (a catch — VIDEO1 & VIDEO2 overlap)
+    //     RESET = VRESET_n low (once per frame), reset-dominant.
+    //   A10.8 (active-low) -> B7 /2TR fires the 728ms CATCHOS one-shot.  BUF1
+    //   (DICE 30ns deglitch) collapses away since CATCH_n is already synchronous.
+    logic a10_latched = 1'b0;
+    always_ff @(posedge clk_sys) begin
+        if      (!VRESET_n) a10_latched <= 1'b0;   // reset each frame
+        else if (!CATCH_n)  a10_latched <= 1'b1;   // set on catch
+    end
+    assign A10_pin8 = ~a10_latched;
+
+    // E8 - 555 astable, the PROXIMITY-modulated oscillator (proximity "footstep"
+    //   sound).  DICE charges an RC cap from the 2-bit {D2.11,D2.3} value to set
+    //   E8's CV; we approximate it as a discrete 4-rate digital astable.  Index 0
+    //   = players aligned = fastest; indices 2/3 = far apart = near cutoff (slow).
+    //   Held low in ATTRACT (E8 /RST = ATTRACT_n).  Rates tunable on hardware.
+    wire [1:0] prox_idx = {D2_pin11, D2_pin3};
+    logic [22:0] e8_half;
+    always_comb begin
+        case (prox_idx)
+            2'd0:    e8_half = 23'd795_454;    // ~18 Hz (closest)
+            2'd1:    e8_half = 23'd1_431_818;  // ~10 Hz
+            default: e8_half = 23'd3_977_272;  // ~3.6 Hz (far / cutoff)
+        endcase
+    end
+    logic [22:0] e8_counter = '0;
+    logic        e8_q       = 1'b0;
+    always_ff @(posedge clk_sys) begin
+        if (!ATTRACT_n) begin
+            e8_counter <= '0;
+            e8_q       <= 1'b0;
+        end else if (e8_counter >= e8_half) begin
+            e8_counter <= '0;
+            e8_q       <= ~e8_q;
+        end else begin
+            e8_counter <= e8_counter + 23'd1;
+        end
+    end
+    assign E8_pin3 = e8_q;
+
+    // Audio mix.  Two 1-bit gated square sources, both idle HIGH:
+    //   M4c_pin3 = proximity (V8 ~1kHz tone pulsed at the E8 footstep rate),
+    //   M4c_pin6 = catch     (V8 tone gated on for the 728ms CATCHOS one-shot).
+    // DICE sums them through MIXER1/MIXER2; here each source maps to +/-amp and
+    // they add.  Steady (silent) levels are pure DC and the framework DC-blocker
+    // removes them; the framework IIR LPF anti-aliases the raw squares.
+    //   REGISTERED on clk_sys (not a bare combinational assign): audio_out commits
+    //   a sample only when it reads the same value on two consecutive clk_audio
+    //   edges, so AUDIO_L/R must be glitch-free and stable.  The audio content
+    //   changes at <=~1kHz (V8), far slower than clk_sys, so the registered value
+    //   easily holds stable across many clk_audio cycles.  (mister-framework-
+    //   reference/41-audio.md §2, §4.3, anti-pattern A.2.)
+    localparam signed [15:0] PROX_AMP  = 16'sd6000;
+    localparam signed [15:0] CATCH_AMP = 16'sd9000;
+    logic signed [15:0] audio_q = '0;
+    always_ff @(posedge clk_sys)
+        audio_q <= (M4c_pin3 ? PROX_AMP  : -PROX_AMP)
+                 + (M4c_pin6 ? CATCH_AMP : -CATCH_AMP);
+    assign audio = audio_q;
 
     // ------------------------------------------------------------------
     // Module outputs

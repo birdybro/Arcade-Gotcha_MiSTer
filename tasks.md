@@ -4,9 +4,15 @@ Path from current state (chip-level sync gen, blank 240p signal) to a fully play
 
 ---
 
-## 📍 Resume here — Phase 6 (Left player) written; Phase 5 right-player deadlock still open
+## 📍 Resume here — Phases 5-7 written; right-player deadlock + hardware/ear test still open
 
-**Status (2026-05-30):** Phase 6 (Left player) is fully translated and lints clean — see the "Phase 6 — Left player" section below for what was added.  Phase 5 debug hacks are reverted (clean tree).  The right-player power-on deadlock (below) is **still unresolved** — the left player mirrors the same comparator structure so it may show the same bug on hardware.  Both Phase 5 + Phase 6 are uncommitted.  Next options: (a) hardware-test the two-player build, (b) chase the spawn-in-wall comparator/maze bug, (c) start Phase 7 (Sound).
+**Status (2026-05-30):** Phases 5 (Right player), 6 (Left player), and 7 (Sound) are all translated and lint clean.  Phases 5-6 are committed (`fc04202`, pushed); **Phase 7 is uncommitted**.  The core is now feature-complete except Phase 8 polish (3-channel colour video, DIP/POT options, release `.rbf`).
+
+**Still open:**
+1. **Right-player power-on deadlock** (sprite spawns on a maze wall → B8 lock → dead joystick) — unresolved; the left player shares the comparator structure so likely shows it too.  See the right-player debug notes below.  Root-cause candidate: MAZE geometry / VIDEO1 position comparator (NOT init, NOT missing chips — re-verified against DICE).
+2. **Audio ear-test:** the Phase 7 E8 footstep rates (`e8_half` case) and PROX_AMP/CATCH_AMP amplitudes in gotcha.sv are approximations — tune on hardware.
+
+Next options: (a) hardware-test the full build (video + audio), (b) chase the spawn-in-wall comparator/maze bug, (c) Phase 8 polish.
 
 ---
 
@@ -146,8 +152,21 @@ Ported `/* Left control */` (885-954) + `/* Left counters */` (955-1059) — the
 - **Still stubbed (Sound, Phase 7):** M4-chip g1/g2 → AUDIO, L4 g1 (E8.3), A10, D2 g1/g4 (PROXIMITY/LOG1).  `/* M1,M3 */` (563-566) done in Phase 2.
 - **NOTE:** the left player shares the Right player's comparator structure, so if the right-player spawn-in-wall deadlock is a geometry/comparator bug, the left player will exhibit it too.  Hardware test will tell.
 
-### Phase 7 — Sound
-Ports `/* Sound */` (~1055-end): A10 (7400 — feeds B7 half B's CATCHOS trigger; replaces the `A10_pin8_stub`), M2/D2-gate1/J2-FF1, K10 (ttl_555_mono), the PROXIMITY custom block (RC cap charge — discretize as a low-pass + threshold), and the audio mixers.  Route audio into `AUDIO_L/R` in Arcade-Gotcha.sv.  Also lets D8 become the real POT1-driven 555 astable instead of the inline clk divider.
+### Phase 7 — Sound ✓ DONE (2026-05-30, awaiting hardware verification)
+Ported `/* Sound */` (gotcha.cpp 1052-1111).  Approach: faithful digital control logic + **pragmatic discrete-pitch** audio synthesis (user-chosen).
+- **A10** (7400): gates 3+4 cross-coupled as the CATCHOS NAND SR latch — SET by CATCH_n falling (a catch), RESET by VRESET_n once per frame; A10.8 → B7 /2TR.  **Replaces the `A10_pin8_stub`** (the stub is deleted).  BUF1 (30ns deglitch) collapses to a wire — CATCH_n is already clk_sys-synchronous.
+- **D2 g1/g4 un-stubbed:** D2.3 = Y(J2./Q2) ^ J2.Q1, D2.11 = K1.Q3 ^ D1.Q3 → the 2-bit PROXIMITY value {D2.11, D2.3}.
+- **E8** (proximity oscillator): the 555 astable + PROXIMITY RC block approximated as an inline 4-rate digital astable keyed on the 2-bit value (index0=aligned=~18Hz fastest, index1=~10Hz, index2/3=far=~3.6Hz/cutoff).  Held low in ATTRACT (/RST=ATTRACT_n).  **Rates are tunable on hardware** (`e8_half` case in gotcha.sv).
+- **L4 g1, M4-chip g1/g2 un-stubbed:** L4.1 = ~(E8.3 | ATTRACT); M4.3 = ~(L4.1 & V8) (proximity source), M4.6 = ~(V8 & CATCHOS) (catch source).
+- **Audio mix → AUDIO_L/R:** the two 1-bit gated square sources (V8 ~1kHz tone pulsed at the E8 footstep rate / gated by the 728ms CATCHOS) mapped to ±amp and summed to a signed 16-bit `audio` output; emu.sv sets `AUDIO_S=1`, `AUDIO_L=AUDIO_R=audio`.  Sound = the "footstep that quickens as players approach" + the catch sound.
+- **Framework-doc refinements (checked against the new `mister-framework-reference/41-audio.md` + `hdl-coding-guidelines/90-anti-patterns.md`):**
+  - **`audio` is registered on clk_sys**, not a bare combinational `assign` — `audio_out` commits a sample only when it reads the same value on two consecutive `clk_audio` edges (stability synchroniser), so AUDIO_L/R must be glitch-free/stable (41-audio §2, §4.3, anti-pattern A.2).  Mono → AUDIO_L=AUDIO_R, AUDIO_MIX=0, AUDIO_S=1 (signed) — all per the doc's mono pattern.  Raw squares are anti-aliased by the framework's always-on IIR LPF (don't bypass it — anti-pattern A.4).
+  - **A10 CATCHOS latch is a clocked SR latch, not cross-coupled ttl_7400 gates** — a pure-combinational cross-coupled NAND latch is a bistable feedback loop (hdl anti-pattern #3).  Modeled like ttl_latch.sv: SET=CATCH_n low, RESET=VRESET_n low (reset-dominant).
+  - Note: the only remaining combinational loops in the design are the **Phase-0 HBLANK/VBLANK NOR/NAND latches** (M5/F6) — pre-existing, compile on hardware; a possible future cleanup but not touched.
+- **Verified:** `verilator --lint-only` clean.  No new primitive files (A10 + E8 inline like D8/ttl_latch).
+- **Deferred to Phase 8:** D8 is still the inline ~1Hz divider, not the real POT1-driven 555 astable (play-time pot is a Phase 8 config option).  AUDIO amplitudes/E8 rates need an ear test on hardware.
+
+> **Reference docs (added 2026-05-30):** `mister-framework-reference/` and `hdl-coding-guidelines/` are local reference trees (framework contracts + Cyclone V HDL guidelines).  Currently untracked — consider committing them and adding a pointer in CLAUDE.md.  `41-audio.md` and `90-anti-patterns.md` already shaped the Phase 7 audio code above.
 
 ### Phase 8 — Polish
 - 3-channel colour video instead of monochrome OR.
